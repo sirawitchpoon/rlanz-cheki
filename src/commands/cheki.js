@@ -14,6 +14,7 @@ const {
   ChannelType,
   MessageFlags,
   EmbedBuilder,
+  PermissionFlagsBits,
 } = require('discord.js');
 const repo = require('../db/repo');
 const config = require('../config');
@@ -28,6 +29,10 @@ const { discordTime, formatBangkok } = require('../lib/time');
 const data = new SlashCommandBuilder()
   .setName('cheki')
   .setDescription('ระบบขายเชกิแบบดรอป (สำหรับแอดมิน)')
+  // Hide the command from regular members: only users with Manage Server (and
+  // the guild owner) see it by default. Actual execution is still gated by the
+  // isAdmin() check, which also honours the configured admin role.
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addSubcommand((s) =>
     s
       .setName('config')
