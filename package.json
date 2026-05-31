@@ -1,0 +1,22 @@
+{
+  "name": "rlanz-cheki",
+  "version": "1.0.0",
+  "description": "Discord bot for selling limited cheki prints via scheduled drops, a waitlist queue, manual PromptPay slip verification, and per-design private payment channels.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "promptpay-qr": "^0.5.0",
+    "qrcode": "^1.5.4"
+  },
+  "license": "MIT"
+}

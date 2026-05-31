@@ -1,0 +1,18 @@
+# Run the bot on the VPS with:
+#   docker compose up -d --build
+# Register slash commands once (or after changing them):
+#   docker compose run --rm bot node src/deploy-commands.js
+# Logs:    docker compose logs -f
+# Update:  git pull && docker compose up -d --build
+services:
+  bot:
+    build: .
+    image: rlanz-cheki:latest
+    container_name: cheki-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    # DB (cheki.db), images and backups persist on the host under ./data
+    volumes:
+      - ./data:/app/data

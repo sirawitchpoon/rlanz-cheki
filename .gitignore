@@ -1,0 +1,15 @@
+node_modules/
+.env
+*.log
+
+# Runtime state — never commit
+data/cheki.db
+data/cheki.db-wal
+data/cheki.db-shm
+data/backups/
+data/images/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/

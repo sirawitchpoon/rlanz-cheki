@@ -1,0 +1,9 @@
+# Normalize line endings to LF in the repo (the bot runs on Linux / in Docker).
+* text=auto eol=lf
+
+# Treat images as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
