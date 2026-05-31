@@ -2,12 +2,8 @@ node_modules/
 .env
 *.log
 
-# Runtime state — never commit
-data/cheki.db
-data/cheki.db-wal
-data/cheki.db-shm
-data/backups/
-data/images/
+# Runtime state — never commit (the dir is recreated at boot / in Docker)
+data/
 
 # OS / editor cruft
 .DS_Store
