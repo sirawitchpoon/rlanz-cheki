@@ -25,6 +25,18 @@ db.pragma('busy_timeout = 5000');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// Lightweight migrations: CREATE TABLE IF NOT EXISTS never adds columns to an
+// existing table, so add any new columns to already-deployed databases here.
+// (table/column are static literals — no injection risk.)
+function ensureColumn(table, column, typeDdl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${typeDdl}`);
+    logger.info(`Migrated: added ${table}.${column}`);
+  }
+}
+ensureColumn('config', 'qr_image_path', 'TEXT');
+
 // Seed the monotonic counter row once.
 db.prepare('INSERT OR IGNORE INTO seq_counter (id, val) VALUES (1, 0)').run();
 

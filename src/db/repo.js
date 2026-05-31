@@ -14,9 +14,9 @@ const stmt = {
   getConfig: db.prepare('SELECT * FROM config WHERE id = 1'),
   insertConfig: db.prepare(`
     INSERT INTO config (id, guild_id, admin_role_id, announce_channel_id,
-                        setup_channel_id, ticket_category_id, promptpay_id, updated_at)
+                        setup_channel_id, ticket_category_id, promptpay_id, qr_image_path, updated_at)
     VALUES (1, @guild_id, @admin_role_id, @announce_channel_id,
-            @setup_channel_id, @ticket_category_id, @promptpay_id, @updated_at)
+            @setup_channel_id, @ticket_category_id, @promptpay_id, @qr_image_path, @updated_at)
     ON CONFLICT(id) DO UPDATE SET
       guild_id            = excluded.guild_id,
       admin_role_id       = excluded.admin_role_id,
@@ -24,6 +24,7 @@ const stmt = {
       setup_channel_id    = excluded.setup_channel_id,
       ticket_category_id  = excluded.ticket_category_id,
       promptpay_id        = excluded.promptpay_id,
+      qr_image_path       = excluded.qr_image_path,
       updated_at          = excluded.updated_at
   `),
 
@@ -142,6 +143,7 @@ function upsertConfig(patch) {
     setup_channel_id: patch.setup_channel_id ?? current.setup_channel_id ?? null,
     ticket_category_id: patch.ticket_category_id ?? current.ticket_category_id ?? null,
     promptpay_id: patch.promptpay_id ?? current.promptpay_id ?? null,
+    qr_image_path: patch.qr_image_path ?? current.qr_image_path ?? null,
     updated_at: nowSeconds(),
   };
   if (!row.guild_id) throw new Error('config.guild_id is required');

@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS config (
   announce_channel_id TEXT,   -- public channel where the drop is posted
   setup_channel_id    TEXT,   -- admin-only channel holding the control panel
   ticket_category_id  TEXT,   -- category under which private channels are created
-  promptpay_id        TEXT,   -- phone number or 13-digit national id
+  promptpay_id        TEXT,   -- phone number or 13-digit national id (generates a QR with amount)
+  qr_image_path       TEXT,   -- uploaded static QR image (takes priority over promptpay_id)
   updated_at          INTEGER NOT NULL
 );
 

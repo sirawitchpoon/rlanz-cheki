@@ -125,8 +125,8 @@ async function publish(interaction) {
   if (!config || !config.announce_channel_id) {
     return interaction.editReply('ยังไม่ได้ตั้งห้องประกาศขาย — ใช้ /cheki config ก่อน');
   }
-  if (!config.promptpay_id) {
-    return interaction.editReply('ยังไม่ได้ตั้ง PromptPay id — ใช้ /cheki config ก่อน');
+  if (!config.promptpay_id && !config.qr_image_path) {
+    return interaction.editReply('ยังไม่ได้ตั้งวิธีรับเงิน — ใช้ /cheki config ใส่ promptpay_id หรืออัป qr_image ก่อน');
   }
   if (!repo.isDropComplete(drop.id)) {
     return interaction.editReply('ข้อมูลยังไม่ครบ — ต้องมีชื่อ ราคา และรูป ครบทั้ง 5 ลาย');

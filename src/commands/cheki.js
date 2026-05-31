@@ -57,7 +57,13 @@ const data = new SlashCommandBuilder()
       .addStringOption((o) =>
         o
           .setName('promptpay_id')
-          .setDescription('เบอร์พร้อมเพย์ หรือเลขบัตรประชาชน 13 หลัก')
+          .setDescription('เบอร์พร้อมเพย์/เลขบัตร (บอทสร้าง QR ฝังยอดให้)')
+          .setRequired(false),
+      )
+      .addAttachmentOption((o) =>
+        o
+          .setName('qr_image')
+          .setDescription('อัปรูป QR เอง (จะใช้รูปนี้แทน — ผู้ซื้อกรอกยอดเอง)')
           .setRequired(false),
       ),
   )
@@ -109,24 +115,50 @@ async function execute(interaction) {
 }
 
 async function doConfig(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const patch = { guild_id: interaction.guildId };
   const role = interaction.options.getRole('admin_role');
   const announce = interaction.options.getChannel('announce_channel');
   const category = interaction.options.getChannel('ticket_category');
   const promptpay = interaction.options.getString('promptpay_id');
+  const qrImage = interaction.options.getAttachment('qr_image');
   if (role) patch.admin_role_id = role.id;
   if (announce) patch.announce_channel_id = announce.id;
   if (category) patch.ticket_category_id = category.id;
   if (promptpay) patch.promptpay_id = promptpay.replace(/[\s-]/g, '');
 
+  if (qrImage) {
+    const isImage =
+      (qrImage.contentType && qrImage.contentType.startsWith('image/')) ||
+      ALLOWED_IMAGE_EXT.has(path.extname(qrImage.name || '').toLowerCase());
+    if (!isImage) return interaction.editReply('ไฟล์ QR ต้องเป็นรูปภาพ (png/jpg/webp)');
+    try {
+      const ext = (path.extname(qrImage.name || '') || '.png').toLowerCase();
+      fs.mkdirSync(config.imagesDir, { recursive: true });
+      const dest = path.join(config.imagesDir, `qr${ext}`);
+      const res = await fetch(qrImage.url);
+      if (!res.ok) throw new Error(`download failed: ${res.status}`);
+      fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+      patch.qr_image_path = dest;
+    } catch (err) {
+      logger.error(`qr image upload failed: ${err.message}`);
+      return interaction.editReply('อัปโหลดรูป QR ไม่สำเร็จ ลองใหม่');
+    }
+  }
+
   const saved = repo.upsertConfig(patch);
+  const payment = saved.qr_image_path
+    ? 'รูป QR ที่อัปโหลด ✅ (ผู้ซื้อกรอกยอดเอง)'
+    : saved.promptpay_id
+      ? `สร้าง QR จาก \`${saved.promptpay_id}\` (ฝังยอดอัตโนมัติ)`
+      : '—';
   const summary = [
     `Admin role: ${saved.admin_role_id ? `<@&${saved.admin_role_id}>` : '—'}`,
     `ห้องประกาศ: ${saved.announce_channel_id ? `<#${saved.announce_channel_id}>` : '—'}`,
     `Category ห้องส่วนตัว: ${saved.ticket_category_id ? `<#${saved.ticket_category_id}>` : '—'}`,
-    `PromptPay: ${saved.promptpay_id ? `\`${saved.promptpay_id}\`` : '—'}`,
+    `วิธีรับเงิน: ${payment}`,
   ].join('\n');
-  return interaction.reply({ content: `บันทึกการตั้งค่าแล้ว ✅\n${summary}`, flags: MessageFlags.Ephemeral });
+  return interaction.editReply(`บันทึกการตั้งค่าแล้ว ✅\n${summary}`);
 }
 
 async function doInit(interaction) {

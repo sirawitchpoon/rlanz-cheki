@@ -5,6 +5,8 @@
 // (re-permission + purge history) rather than delete+recreate — this avoids the
 // channel-create rate limit and a crash-mid-create window. Channels are only
 // fully deleted via the admin Cleanup button in the setup channel.
+const fs = require('fs');
+const path = require('path');
 const {
   ChannelType,
   PermissionFlagsBits,
@@ -86,8 +88,25 @@ function buildOverwrites(guild, config, buyerUserId) {
 // admin Confirm/Release buttons. The buttons are visible to all in the channel
 // but gated by an admin-role check in their handlers.
 async function buildControlPayload(item, config, buyerUserId) {
-  const qrBuffer = await qrService.generate(config.promptpay_id, item.price_satang);
-  const qrFile = new AttachmentBuilder(qrBuffer, { name: 'promptpay.png' });
+  // Payment QR source: an uploaded static image takes priority; otherwise
+  // generate a PromptPay QR with the exact amount embedded.
+  const files = [];
+  let imageName = null;
+  let amountEmbedded = false;
+  if (config.qr_image_path && fs.existsSync(config.qr_image_path)) {
+    const ext = path.extname(config.qr_image_path) || '.png';
+    imageName = `promptpay${ext}`;
+    files.push(new AttachmentBuilder(config.qr_image_path, { name: imageName }));
+  } else if (config.promptpay_id) {
+    const qrBuffer = await qrService.generate(config.promptpay_id, item.price_satang);
+    imageName = 'promptpay.png';
+    files.push(new AttachmentBuilder(qrBuffer, { name: imageName }));
+    amountEmbedded = true;
+  }
+
+  const step1 = amountEmbedded
+    ? '1️⃣ สแกน QR ด้านล่าง — ยอดเงินถูกกำหนดไว้แล้ว (ตรวจให้ตรง)\n'
+    : `1️⃣ สแกน QR ด้านล่าง แล้ว **กรอกยอดเอง = ${formatBaht(item.price_satang)}** ให้ตรงเป๊ะ\n`;
 
   const embed = new EmbedBuilder()
     .setTitle(`💳 ชำระเงิน — เชกิลายที่ ${item.slot}${item.title ? ` (${item.title})` : ''}`)
@@ -95,13 +114,13 @@ async function buildControlPayload(item, config, buyerUserId) {
     .setDescription(
       `ยอดที่ต้องโอน: **${formatBaht(item.price_satang)}**\n\n` +
         '**ขั้นตอน**\n' +
-        '1️⃣ สแกน QR พร้อมเพย์ด้านล่าง (ยอดเงินถูกกำหนดไว้แล้ว)\n' +
+        step1 +
         '2️⃣ ส่ง **รูปสลิป** ที่มี QR ตรวจสอบสลิป ในห้องนี้\n' +
         '3️⃣ พิมพ์ **ชื่อผู้รับ / ที่อยู่ / เบอร์โทร** สำหรับจัดส่ง\n\n' +
         'แล้วรอแอดมินตรวจสอบและยืนยันค่ะ 💖',
     )
-    .setImage('attachment://promptpay.png')
     .setFooter({ text: 'ปุ่มด้านล่างสำหรับแอดมินเท่านั้น' });
+  if (imageName) embed.setImage(`attachment://${imageName}`);
 
   const adminRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -119,7 +138,7 @@ async function buildControlPayload(item, config, buyerUserId) {
   return {
     content: `<@${buyerUserId}> คุณได้สิทธิ์ซื้อ (คิวที่ 1) แล้ว 🎉 กรุณาชำระเงินภายในห้องนี้`,
     embeds: [embed],
-    files: [qrFile],
+    files,
     components: [adminRow],
   };
 }
@@ -200,4 +219,4 @@ async function cleanupAll(dropId) {
   return deleted;
 }
 
-module.exports = { assign, lockIdle, cleanupAll, fetchChannelSafe };
+module.exports = { assign, lockIdle, cleanupAll, fetchChannelSafe, buildControlPayload };
