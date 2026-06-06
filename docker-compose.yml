@@ -13,6 +13,24 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
+      # Cap the V8 heap BELOW mem_limit so Node garbage-collects instead of being
+      # OOM-killed by the cgroup.
+      - NODE_OPTIONS=--max-old-space-size=160
+    # Resource ceilings so this bot can never starve the other containers on the
+    # VPS. It is light (~80-150MB RSS with the tuned discord.js cache, near-idle
+    # CPU). If it ever OOM-restarts (docker logs / `docker inspect` shows exit
+    # 137 / OOMKilled) raise mem_limit; on a very small VPS you can drop to
+    # mem_limit 192m together with NODE_OPTIONS=--max-old-space-size=128.
+    mem_limit: 256m
+    mem_reservation: 96m
+    cpus: 0.5
+    pids_limit: 256
+    # Cap log disk usage — the json-file driver grows unbounded by default.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # DB (cheki.db), images and backups persist on the host under ./data
     volumes:
       - ./data:/app/data

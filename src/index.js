@@ -2,7 +2,7 @@
 
 // Bot entrypoint: builds the client, wires events, rehydrates scheduled drops
 // on boot, and logs in.
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Options } = require('discord.js');
 const config = require('./config');
 const logger = require('./logger');
 const ctx = require('./lib/context');
@@ -17,6 +17,20 @@ const client = new Client({
     GatewayIntentBits.GuildMembers, // guildMemberRemove (privileged: enable in Dev Portal)
     GatewayIntentBits.GuildMessages, // detect buyer messages in ticket channels
   ],
+  // Keep resident memory small and predictable: this bot reads everything from
+  // gateway events, never from cache, so cache only what discord.js needs to
+  // operate. (Guild/Channel/Role caches are required by the library — limiting
+  // them is unsupported and would break, so they stay at the defaults.)
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    MessageManager: 0, // MessageCreate uses the event object, not the cache
+    PresenceManager: 0, // no GuildPresences intent — nothing to cache
+    ReactionManager: 0, // reactions unused
+    GuildMemberManager: {
+      maxSize: 200, // LimitedCollection evicts the oldest beyond this, so it self-bounds
+      keepOverLimit: (member) => member.id === member.client.user.id, // always keep the bot
+    },
+  }),
 });
 
 client.once(Events.ClientReady, async (c) => {
