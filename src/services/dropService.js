@@ -42,16 +42,23 @@ function armTimers(dropId) {
 
   if (drop.state === 'scheduled' && drop.teaser_at) {
     if (drop.teaser_at > now) {
-      entry.teaser = longTimeout((drop.teaser_at - now) * 1000, () => postTeasers(dropId));
+      entry.teaser = longTimeout((drop.teaser_at - now) * 1000, () =>
+        postTeasers(dropId).catch((e) => logger.error(`postTeasers(${dropId}) failed: ${e.message}`)),
+      );
     } else if (drop.publish_at && drop.publish_at > now) {
       // Missed the teaser window but the drop hasn't happened — tease now.
-      postTeasers(dropId).catch((e) => logger.error(`postTeasers: ${e.message}`));
+      postTeasers(dropId).catch((e) => logger.error(`postTeasers(${dropId}) failed: ${e.message}`));
     }
   }
 
   if (drop.publish_at) {
     const delay = Math.max(0, (drop.publish_at - now) * 1000);
-    entry.publish = longTimeout(delay, () => revealDrop(dropId));
+    // The timer callback must catch its own rejection — an unhandled reject here
+    // (e.g. the announce channel was deleted) would otherwise reveal nothing and
+    // only surface in the process-level handler.
+    entry.publish = longTimeout(delay, () =>
+      revealDrop(dropId).catch((e) => logger.error(`revealDrop(${dropId}) failed: ${e.message}`)),
+    );
   }
 
   timers.set(dropId, entry);
@@ -130,10 +137,15 @@ function cancelDrop(dropId) {
 async function rehydrate() {
   const drops = repo.getDropsToRehydrate();
   for (const drop of drops) {
-    if (drop.state === 'scheduled' || drop.state === 'teasing') {
-      armTimers(drop.id);
+    // Per-drop guard: one malformed drop must not abort re-arming the rest.
+    try {
+      if (drop.state === 'scheduled' || drop.state === 'teasing') {
+        armTimers(drop.id);
+      }
+      // 'live' drops need no timers; their buttons are routed by custom_id.
+    } catch (err) {
+      logger.error(`rehydrate: arming drop ${drop.id} failed: ${err.message}`);
     }
-    // 'live' drops need no timers; their buttons are routed by custom_id.
   }
   logger.info(`Rehydrated ${drops.length} active drop(s)`);
 }

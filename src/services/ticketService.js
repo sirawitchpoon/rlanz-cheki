@@ -196,6 +196,27 @@ async function lockIdle(itemId) {
   repo.setTicketState(itemId, 'idle');
 }
 
+// Post an admin-facing alert to the setup channel (fallback: announce channel).
+// Used when an automatic action — e.g. opening a ticket channel — failed and a
+// human needs to step in. Best-effort: never throws.
+async function notifyAdmins(text) {
+  const config = repo.getConfig();
+  if (!config) return;
+  const channelId = config.setup_channel_id || config.announce_channel_id;
+  if (!channelId) return;
+  const channel = await fetchChannelSafe(channelId);
+  if (!channel) return;
+  const mention = config.admin_role_id ? `<@&${config.admin_role_id}> ` : '';
+  try {
+    await channel.send({
+      content: `${mention}${text}`,
+      allowedMentions: { roles: config.admin_role_id ? [config.admin_role_id] : [] },
+    });
+  } catch (err) {
+    logger.warn(`notifyAdmins failed: ${err.message}`);
+  }
+}
+
 // Delete every ticket channel of a drop and reset the rows. The ONLY deletion path.
 async function cleanupAll(dropId) {
   const tickets = repo.getTicketsByDrop(dropId);
@@ -219,4 +240,4 @@ async function cleanupAll(dropId) {
   return deleted;
 }
 
-module.exports = { assign, lockIdle, cleanupAll, fetchChannelSafe, buildControlPayload };
+module.exports = { assign, lockIdle, cleanupAll, notifyAdmins, fetchChannelSafe, buildControlPayload };

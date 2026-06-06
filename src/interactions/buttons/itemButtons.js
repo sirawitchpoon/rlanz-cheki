@@ -10,13 +10,20 @@ async function reserve(interaction, itemId) {
   if (res.error) return interaction.editReply('ไม่พบลายนี้');
   if (res.sold) return interaction.editReply('ลายนี้ขายไปแล้ว 😢');
   if (res.already) {
-    return interaction.editReply(
-      `คุณอยู่ในคิวอยู่แล้ว — คิวที่ **${res.position}**${res.active ? ' (คุณคือคิวแรก! ไปชำระเงินในห้องส่วนตัวได้เลย)' : ''}`,
-    );
+    if (res.active) {
+      return interaction.editReply(
+        res.channelId
+          ? `คุณคือคิวแรกแล้ว 🎉 ไปที่ห้อง <#${res.channelId}> เพื่อชำระเงินได้เลยค่ะ`
+          : '⚠️ คุณคือคิวแรกแล้ว แต่ระบบเปิดห้องไม่สำเร็จ — แอดมินได้รับแจ้งแล้ว กรุณารอสักครู่ หรือกด "จอง" อีกครั้ง',
+      );
+    }
+    return interaction.editReply(`คุณอยู่ในคิวอยู่แล้ว — คิวที่ **${res.position}**`);
   }
   if (res.becameFirst) {
     return interaction.editReply(
-      `🎉 คุณได้สิทธิ์คิวแรก! ไปที่ห้อง ${res.channelId ? `<#${res.channelId}>` : 'ส่วนตัว'} เพื่อชำระเงินได้เลยค่ะ`,
+      res.channelId
+        ? `🎉 คุณได้สิทธิ์คิวแรก! ไปที่ห้อง <#${res.channelId}> เพื่อชำระเงินได้เลยค่ะ`
+        : '🎉 คุณได้สิทธิ์คิวแรก! แต่ระบบเปิดห้องอัตโนมัติไม่สำเร็จ — แอดมินได้รับแจ้งแล้ว กรุณารอสักครู่ หรือกด "จอง" อีกครั้ง',
     );
   }
   return interaction.editReply(`✅ จองสำเร็จ! คุณอยู่คิวที่ **${res.position}** — รอแอดมินเรียกตามคิว`);
