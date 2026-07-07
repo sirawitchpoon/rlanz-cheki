@@ -133,6 +133,7 @@ const stmt = {
   setOrderTracking: db.prepare(
     'UPDATE won_orders SET tracking_no = ?, tracking_carrier = ?, tracking_sent_at = ? WHERE item_id = ?',
   ),
+  setOrderRecipient: db.prepare('UPDATE won_orders SET recipient_name = ? WHERE item_id = ?'),
 };
 
 /* -------------------------------- config --------------------------------- */
@@ -415,6 +416,9 @@ function getOrderByItem(itemId) {
 function setOrderTracking(itemId, trackingNo, carrier) {
   stmt.setOrderTracking.run(trackingNo, carrier || null, nowSeconds(), itemId);
 }
+function setOrderRecipient(itemId, name) {
+  stmt.setOrderRecipient.run(name || null, itemId);
+}
 
 module.exports = {
   // config
@@ -471,4 +475,5 @@ module.exports = {
   getAllOrders,
   getOrderByItem,
   setOrderTracking,
+  setOrderRecipient,
 };

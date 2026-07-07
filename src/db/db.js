@@ -39,6 +39,7 @@ ensureColumn('config', 'qr_image_path', 'TEXT');
 ensureColumn('won_orders', 'tracking_no', 'TEXT');
 ensureColumn('won_orders', 'tracking_sent_at', 'INTEGER');
 ensureColumn('won_orders', 'tracking_carrier', 'TEXT');
+ensureColumn('won_orders', 'recipient_name', 'TEXT');
 // Per-drop display name (e.g. "Stelle - Drop") and its own announce channel
 // (overrides config.announce_channel_id so each drop can post to its own room).
 ensureColumn('drops', 'name', 'TEXT');

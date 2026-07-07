@@ -31,6 +31,7 @@ const dropService = require('../services/dropService');
 const ticketService = require('../services/ticketService');
 const queueService = require('../services/queueService');
 const embedService = require('../services/embedService');
+const supabaseSync = require('../services/supabaseSync');
 const { formatBangkok } = require('../lib/time');
 const { publicList: carrierList } = require('../lib/carriers');
 
@@ -76,6 +77,7 @@ function itemView(item) {
     channelName: channelName(ticket ? ticket.channel_id : null),
     ticketState: ticket ? ticket.state : null,
     buyerUserId: item.buyer_user_id, // final buyer once sold
+    recipientName: order ? order.recipient_name : null,
     trackingNo: order ? order.tracking_no : null,
     trackingCarrier: order ? order.tracking_carrier : null,
     trackingSentAt: order ? order.tracking_sent_at : null,
@@ -306,6 +308,17 @@ function buildApp(express) {
     res.json({ ok: true, result, item: itemView(repo.getItem(id)) });
   }));
 
+  // Save order-level shipping fields (recipient name) without notifying anyone.
+  app.patch('/api/items/:id/order', wrap((req, res) => {
+    const id = Number(req.params.id);
+    if (!repo.getOrderByItem(id)) return res.status(404).json({ error: 'no_order' });
+    if (req.body && typeof req.body.recipient === 'string') {
+      repo.setOrderRecipient(id, req.body.recipient.trim() || null);
+      supabaseSync.syncOrder(id).catch(() => {});
+    }
+    res.json({ ok: true, item: itemView(repo.getItem(id)) });
+  }));
+
   // Post a tracking number into the buyer's private channel (after shipping).
   app.post('/api/items/:id/track', requireReady, wrap(async (req, res) => {
     const id = Number(req.params.id);
@@ -313,6 +326,10 @@ function buildApp(express) {
     const trackingNo = (req.body && req.body.trackingNo) || '';
     const carrier = (req.body && req.body.carrier) || null;
     if (!String(trackingNo).trim()) return res.status(400).json({ error: 'no_tracking' });
+    // Optionally record the recipient name in the same action (embed reads it).
+    if (req.body && typeof req.body.recipient === 'string') {
+      repo.setOrderRecipient(id, req.body.recipient.trim() || null);
+    }
     const result = await ticketService.notifyTracking(id, trackingNo, carrier);
     logger.info(`admin(${req.adminEmail}) sent tracking for item ${id}`);
     res.json({ ok: true, result, item: itemView(repo.getItem(id)) });

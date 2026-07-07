@@ -16,6 +16,7 @@ create table if not exists cheki_orders (
   slot             int,
   title            text,
   buyer_user_id    text,
+  recipient_name   text,
   price_satang     bigint,
   shipping_note    text,
   sold_at          bigint,
@@ -29,6 +30,12 @@ create table if not exists cheki_orders (
 -- เปิด RLS โดยไม่ใส่ policy = anon เข้าไม่ได้เลย, ส่วน service_role (ที่บอทใช้) bypass ได้ปกติ
 alter table cheki_orders enable row level security;
 ```
+
+> **ถ้าสร้างตารางไปแล้วก่อนมีคอลัมน์ `recipient_name`** ให้รันเพิ่มใน SQL Editor:
+> ```sql
+> alter table cheki_orders add column if not exists recipient_name text;
+> ```
+> (ไม่รัน = การ sync จะ error เพราะส่งคอลัมน์ที่ตารางไม่มี — แต่ไม่กระทบการขาย)
 
 ## 2. เอา URL + Key มาใส่ `.env`
 
