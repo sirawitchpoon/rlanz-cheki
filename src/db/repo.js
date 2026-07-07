@@ -130,7 +130,7 @@ const stmt = {
   getOrdersByDrop: db.prepare('SELECT * FROM won_orders WHERE drop_id = ? ORDER BY slot ASC'),
   getOrderByItem: db.prepare('SELECT * FROM won_orders WHERE item_id = ? ORDER BY id DESC LIMIT 1'),
   setOrderTracking: db.prepare(
-    'UPDATE won_orders SET tracking_no = ?, tracking_sent_at = ? WHERE item_id = ?',
+    'UPDATE won_orders SET tracking_no = ?, tracking_carrier = ?, tracking_sent_at = ? WHERE item_id = ?',
   ),
 };
 
@@ -408,8 +408,8 @@ function getOrdersByDrop(dropId) {
 function getOrderByItem(itemId) {
   return stmt.getOrderByItem.get(itemId) || null;
 }
-function setOrderTracking(itemId, trackingNo) {
-  stmt.setOrderTracking.run(trackingNo, nowSeconds(), itemId);
+function setOrderTracking(itemId, trackingNo, carrier) {
+  stmt.setOrderTracking.run(trackingNo, carrier || null, nowSeconds(), itemId);
 }
 
 module.exports = {
