@@ -170,6 +170,17 @@
               background:var(--ground); border:1px solid var(--border); border-radius:5px; padding:4px 9px; word-break:break-all; }
   .ep-footer { font-size:11px; color:var(--faint); margin-top:9px; }
   .ep-thumb { width:56px; height:56px; object-fit:cover; border-radius:6px; flex:0 0 auto; background:var(--ground); }
+  .ep-carrier { font-weight:600; }
+  .ep-link { display:inline-block; margin-top:9px; font-size:12px; font-weight:600; color:var(--ink-2);
+             background:var(--ground); border:1px solid var(--border-strong); border-radius:6px; padding:5px 11px; }
+  .ep-link[hidden] { display:none; }
+
+  .carrier-pick { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  .carrier-btn { display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12px; padding:5px 10px;
+                 border-radius:999px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-2); cursor:pointer; }
+  .carrier-btn .sw { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+  .carrier-btn:hover { border-color:var(--faint); }
+  .carrier-btn.active { border-color:var(--cc); background:color-mix(in srgb,var(--cc) 13%, transparent); color:var(--ink); font-weight:600; }
 
   .empty { color:var(--muted); padding:56px 20px; text-align:center; background:var(--surface);
            border:1px dashed var(--border-strong); border-radius:var(--radius); }
@@ -263,6 +274,17 @@ const val=(id)=>{ const el=document.getElementById(id); return el?el.value.trim(
 
 let currentId = Number(localStorage.getItem('chekiDrop')) || null;
 let itemsById = {};
+let CARRIERS = [];               // [{id,name,hex}]
+const carrierById = {};
+const pickedCarrier = {};        // itemId -> carrierId (user selection, persists across refresh)
+
+async function loadCarriers(){
+  try{
+    const { carriers } = await api('/api/carriers');
+    CARRIERS = carriers || [];
+    CARRIERS.forEach(c=>{ carrierById[c.id]=c; });
+  }catch(e){ CARRIERS=[]; }
+}
 
 function toggleNav(){ document.querySelector('.sidebar').classList.toggle('open'); }
 function setConn(state,label){
@@ -301,9 +323,10 @@ function embedPreviewHtml(it){
     <div class="ep-card">
       <div class="ep-body">
         <div class="ep-title">📦 พัสดุจัดส่งแล้ว!</div>
-        <div class="ep-desc">เชกิลายที่ ${it.slot}${it.title?(' — '+esc(it.title)):''} ออกเดินทางแล้ว 🚚<br>ขอบคุณที่อุดหนุนนะคะ 💖</div>
+        <div class="ep-desc">เชกิลายที่ ${it.slot}${it.title?(' — '+esc(it.title)):''} ออกเดินทางแล้ว 🚚<br><span class="ep-carrier"></span><br>ขอบคุณที่อุดหนุนนะคะ 💖</div>
         <div class="ep-flabel">เลขติดตามพัสดุ</div><div><code class="ep-track"></code></div>
-        <div class="ep-footer">Rlanz CAFÉ · ตรวจสถานะได้จากแอปขนส่ง</div>
+        <div class="ep-link" hidden></div>
+        <div class="ep-footer">Rlanz CAFÉ</div>
       </div>${thumb}
     </div>
   </div>`;
@@ -313,15 +336,40 @@ function updatePreview(id){
   if(!inp||!ep) return;
   const v=(inp.value||'').trim();
   if(!v){ ep.hidden=true; return; }
-  ep.hidden=false; ep.querySelector('.ep-track').textContent=v;
+  ep.hidden=false;
+  ep.querySelector('.ep-track').textContent=v;
+  const c=carrierById[pickedCarrier[id]];
+  const epcard=ep.querySelector('.ep-card'), carLine=ep.querySelector('.ep-carrier'), link=ep.querySelector('.ep-link');
+  if(c){
+    if(epcard) epcard.style.borderLeftColor=c.hex;
+    if(carLine) carLine.textContent='ขนส่ง: '+c.name;
+    if(link){ link.hidden=false; link.textContent='🔎 ตรวจสถานะ ('+c.name+')'; }
+  } else {
+    if(carLine) carLine.textContent='';
+    if(link) link.hidden=true;
+  }
+}
+function pickCarrier(id,cid){
+  pickedCarrier[id]=cid;
+  const wrap=document.getElementById('cp-'+id);
+  if(wrap) wrap.querySelectorAll('.carrier-btn').forEach(b=>b.classList.toggle('active', b.dataset.c===cid));
+  updatePreview(id);
+}
+function carrierPickHtml(it){
+  if(!CARRIERS.length) return '';
+  return `<div class="carrier-pick" id="cp-${it.id}">${CARRIERS.map(c=>
+    `<button type="button" class="carrier-btn ${pickedCarrier[it.id]===c.id?'active':''}" data-c="${c.id}" style="--cc:${c.hex}" onclick="pickCarrier(${it.id},'${c.id}')"><span class="sw" style="background:${c.hex}"></span>${esc(c.name)}</button>`
+  ).join('')}</div>`;
 }
 
 function card(it){
   const buyer=it.currentBuyerId||it.buyerUserId;
   let block;
   if(it.status==='sold'){
-    const sent=it.trackingNo?`<div class="sent">ส่งเลขแทร็กแล้ว <span class="no">${esc(it.trackingNo)}</span></div>`:'';
+    if(!(it.id in pickedCarrier)) pickedCarrier[it.id]= it.trackingCarrier || (CARRIERS[0]&&CARRIERS[0].id) || null;
+    const sent=it.trackingNo?`<div class="sent">ส่งเลขแทร็กแล้ว <span class="no">${esc(it.trackingNo)}</span>${it.trackingCarrier&&carrierById[it.trackingCarrier]?(' · '+esc(carrierById[it.trackingCarrier].name)):''}</div>`:'';
     block=`${sent}
+      ${carrierPickHtml(it)}
       <div class="track"><input id="tk-${it.id}" placeholder="${it.trackingNo?'แก้ / ส่งซ้ำ…':'เลขติดตามพัสดุ…'}" oninput="updatePreview(${it.id})"><button class="primary" onclick="track(${it.id})">📦 ${it.trackingNo?'ส่งซ้ำ':'ส่งเลขแทร็ก'}</button></div>
       ${embedPreviewHtml(it)}`;
   } else {
@@ -387,8 +435,9 @@ async function act(path,msg){ if(!confirm(msg))return; try{ await api(path,'POST
 async function track(id){
   const el=document.getElementById('tk-'+id); const v=(el.value||'').trim();
   if(!v){ showErr('ใส่เลขติดตามพัสดุก่อน'); el.focus(); return; }
-  if(!confirm(`ส่งเลขแทร็ก "${v}" ไปหาผู้ซื้อในห้องของเขา?`)) return;
-  try{ await api('/api/items/'+id+'/track','POST',{trackingNo:v}); await reloadAll(); }catch(e){ showErr(e.message); }
+  const c=carrierById[pickedCarrier[id]];
+  if(!confirm(`ส่งเลขแทร็ก "${v}"${c?(' ('+c.name+')'):''} ไปหาผู้ซื้อในห้องของเขา?`)) return;
+  try{ await api('/api/items/'+id+'/track','POST',{trackingNo:v, carrier:pickedCarrier[id]||null}); await reloadAll(); }catch(e){ showErr(e.message); }
 }
 
 // --- modal / create / edit ---
@@ -446,7 +495,7 @@ async function reloadAll(){
 }
 function showErr(m){ document.getElementById('err').textContent='⚠️ '+m; }
 
-reloadAll();
+loadCarriers().then(reloadAll);
 setInterval(()=>{ if(document.getElementById('modal').hidden) reloadAll(); }, 15000);
 </script>
 </body>

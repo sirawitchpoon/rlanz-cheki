@@ -22,6 +22,7 @@ const logger = require('../logger');
 const qrService = require('./qrService');
 const { formatBaht } = require('./embedService');
 const { ids } = require('../interactions/ids');
+const { getCarrier } = require('../lib/carriers');
 
 async function fetchChannelSafe(channelId) {
   if (!channelId) return null;
@@ -220,7 +221,7 @@ async function notifyAdmins(text) {
 // Post a shipping/tracking notice into a sold item's private channel, mentioning
 // the buyer, and record the tracking number on the order. Throws (with a short
 // code) if the item/buyer/channel is missing so the caller can report why.
-async function notifyTracking(itemId, trackingNo) {
+async function notifyTracking(itemId, trackingNo, carrierId) {
   const tracking = String(trackingNo || '').trim();
   if (!tracking) throw new Error('no_tracking');
   const item = repo.getItem(itemId);
@@ -231,15 +232,17 @@ async function notifyTracking(itemId, trackingNo) {
   const channel = await fetchChannelSafe(ticket && ticket.channel_id);
   if (!channel) throw new Error('no_channel');
 
+  const carrier = getCarrier(carrierId); // null if unknown/none
   const embed = new EmbedBuilder()
-    .setColor(0x57f287)
+    .setColor(carrier ? carrier.color : 0x57f287) // carrier brand colour (else green)
     .setTitle('📦 พัสดุจัดส่งแล้ว!')
     .setDescription(
       `เชกิลายที่ ${item.slot}${item.title ? ` — ${item.title}` : ''} ออกเดินทางแล้ว 🚚\n` +
+        (carrier ? `ขนส่ง: **${carrier.name}**\n` : '') +
         'ขอบคุณที่อุดหนุนนะคะ 💖',
     )
     .addFields({ name: 'เลขติดตามพัสดุ', value: `\`\`\`\n${tracking}\n\`\`\`` })
-    .setFooter({ text: 'Rlanz CAFÉ · ตรวจสถานะได้จากแอปขนส่ง' });
+    .setFooter({ text: `Rlanz CAFÉ${carrier ? ` · ${carrier.name}` : ''}` });
 
   // Attach the cheki image as the embed thumbnail if we have it locally.
   const files = [];
@@ -250,15 +253,29 @@ async function notifyTracking(itemId, trackingNo) {
     embed.setThumbnail(`attachment://${name}`);
   }
 
+  // Link button to the carrier's tracking page (pre-filled with the number).
+  const components = [];
+  if (carrier) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel(`🔎 ตรวจสถานะ (${carrier.name})`)
+          .setURL(carrier.trackUrl(tracking)),
+      ),
+    );
+  }
+
   await channel.send({
     content: `<@${buyerId}>`,
     embeds: [embed],
     files,
+    components,
     allowedMentions: { users: [buyerId] },
   });
-  repo.setOrderTracking(itemId, tracking);
-  logger.info(`tracking for item ${itemId} sent to ${buyerId} in ${channel.id}`);
-  return { buyerId, channelId: channel.id, tracking };
+  repo.setOrderTracking(itemId, tracking, carrier ? carrier.id : null);
+  logger.info(`tracking for item ${itemId} sent to ${buyerId} via ${carrier ? carrier.id : 'none'}`);
+  return { buyerId, channelId: channel.id, tracking, carrier: carrier ? carrier.id : null };
 }
 
 // Delete every ticket channel of a drop and reset the rows. The ONLY deletion path.

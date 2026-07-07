@@ -32,6 +32,7 @@ const ticketService = require('../services/ticketService');
 const queueService = require('../services/queueService');
 const embedService = require('../services/embedService');
 const { formatBangkok } = require('../lib/time');
+const { publicList: carrierList } = require('../lib/carriers');
 
 const STATUS_LABEL = {
   draft: 'ยังไม่เปิดขาย',
@@ -76,6 +77,7 @@ function itemView(item) {
     ticketState: ticket ? ticket.state : null,
     buyerUserId: item.buyer_user_id, // final buyer once sold
     trackingNo: order ? order.tracking_no : null,
+    trackingCarrier: order ? order.tracking_carrier : null,
     trackingSentAt: order ? order.tracking_sent_at : null,
   };
 }
@@ -165,6 +167,9 @@ function buildApp(express) {
 
   // --- Reads ---------------------------------------------------------------
   app.get('/api/health', (req, res) => res.json({ ok: true, as: req.adminEmail }));
+
+  // Courier options for the tracking selector (Thailand Post / Flash / …).
+  app.get('/api/carriers', (req, res) => res.json({ carriers: carrierList() }));
 
   // Current (in-progress) drop + the channel each design sits in.
   app.get('/api/status', wrap((req, res) => {
@@ -306,8 +311,9 @@ function buildApp(express) {
     const id = Number(req.params.id);
     if (!repo.getItem(id)) return res.status(404).json({ error: 'no_item' });
     const trackingNo = (req.body && req.body.trackingNo) || '';
+    const carrier = (req.body && req.body.carrier) || null;
     if (!String(trackingNo).trim()) return res.status(400).json({ error: 'no_tracking' });
-    const result = await ticketService.notifyTracking(id, trackingNo);
+    const result = await ticketService.notifyTracking(id, trackingNo, carrier);
     logger.info(`admin(${req.adminEmail}) sent tracking for item ${id}`);
     res.json({ ok: true, result, item: itemView(repo.getItem(id)) });
   }));
