@@ -231,11 +231,29 @@ async function notifyTracking(itemId, trackingNo) {
   const channel = await fetchChannelSafe(ticket && ticket.channel_id);
   if (!channel) throw new Error('no_channel');
 
+  const embed = new EmbedBuilder()
+    .setColor(0x57f287)
+    .setTitle('📦 พัสดุจัดส่งแล้ว!')
+    .setDescription(
+      `เชกิลายที่ ${item.slot}${item.title ? ` — ${item.title}` : ''} ออกเดินทางแล้ว 🚚\n` +
+        'ขอบคุณที่อุดหนุนนะคะ 💖',
+    )
+    .addFields({ name: 'เลขติดตามพัสดุ', value: `\`\`\`\n${tracking}\n\`\`\`` })
+    .setFooter({ text: 'Rlanz CAFÉ · ตรวจสถานะได้จากแอปขนส่ง' });
+
+  // Attach the cheki image as the embed thumbnail if we have it locally.
+  const files = [];
+  if (item.image_path && fs.existsSync(item.image_path)) {
+    const ext = path.extname(item.image_path) || '.png';
+    const name = `cheki${ext}`;
+    files.push(new AttachmentBuilder(item.image_path, { name }));
+    embed.setThumbnail(`attachment://${name}`);
+  }
+
   await channel.send({
-    content:
-      `📦 <@${buyerId}> พัสดุเชกิลายที่ ${item.slot}${item.title ? ` (${item.title})` : ''} จัดส่งแล้วค่ะ!\n` +
-      `เลขติดตามพัสดุ: **${tracking}**\n` +
-      'ขอบคุณที่อุดหนุนนะคะ ตรวจสอบสถานะพัสดุได้จากเลขด้านบนเลยค่ะ 💖',
+    content: `<@${buyerId}>`,
+    embeds: [embed],
+    files,
     allowedMentions: { users: [buyerId] },
   });
   repo.setOrderTracking(itemId, tracking);
