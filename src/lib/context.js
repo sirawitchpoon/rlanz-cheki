@@ -16,6 +16,13 @@ function getClient() {
   return client;
 }
 
+// True once the client is set (ClientReady has fired). Lets code that can run
+// before Discord is connected — e.g. the admin dashboard's read endpoints —
+// check readiness instead of catching a throw from getClient().
+function isReady() {
+  return client !== null;
+}
+
 // Returns the single guild this bot serves, from cache. Throws if not cached
 // (which would mean the bot isn't in the guild or hasn't finished READY).
 function getGuild() {
@@ -24,4 +31,4 @@ function getGuild() {
   return guild;
 }
 
-module.exports = { setClient, getClient, getGuild };
+module.exports = { setClient, getClient, getGuild, isReady };

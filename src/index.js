@@ -10,6 +10,7 @@ const repo = require('./db/repo');
 const router = require('./interactions/router');
 const dropService = require('./services/dropService');
 const queueService = require('./services/queueService');
+const adminServer = require('./admin/server');
 
 const client = new Client({
   intents: [
@@ -90,5 +91,16 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   logger.error(`uncaughtException: ${err.stack || err.message}`);
 });
+
+// Start the opt-in web dashboard BEFORE login (only if ADMIN_PORT is set). Its
+// read endpoints work straight off SQLite, so the dashboard is reachable even
+// while Discord is connecting or if the token is bad; write actions return 503
+// until ClientReady sets the live client. Runs in-process so writes reuse the
+// per-item mutex once connected.
+try {
+  adminServer.start();
+} catch (err) {
+  logger.error(`admin server failed to start: ${err.stack || err.message}`);
+}
 
 client.login(config.token);

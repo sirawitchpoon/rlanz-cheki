@@ -70,12 +70,12 @@ function armTimers(dropId) {
 async function postTeasers(dropId) {
   const drop = repo.getDrop(dropId);
   if (!drop || drop.state !== 'scheduled') return; // already past the teaser phase
-  const config = repo.getConfig();
-  if (!config || !config.announce_channel_id) {
+  const channelId = repo.announceChannelFor(drop);
+  if (!channelId) {
     logger.error('postTeasers: announce channel not configured');
     return;
   }
-  const channel = await ctx.getClient().channels.fetch(config.announce_channel_id);
+  const channel = await ctx.getClient().channels.fetch(channelId);
   const items = repo.getItemsByDrop(dropId);
   for (const item of items) {
     try {
@@ -95,12 +95,12 @@ async function revealDrop(dropId) {
   if (!drop || drop.state === 'live' || drop.state === 'done' || drop.state === 'cancelled') {
     return;
   }
-  const config = repo.getConfig();
-  if (!config || !config.announce_channel_id) {
+  const channelId = repo.announceChannelFor(drop);
+  if (!channelId) {
     logger.error('revealDrop: announce channel not configured');
     return;
   }
-  const channel = await ctx.getClient().channels.fetch(config.announce_channel_id);
+  const channel = await ctx.getClient().channels.fetch(channelId);
   const items = repo.getItemsByDrop(dropId);
   for (const item of items) {
     try {
