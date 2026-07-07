@@ -24,6 +24,10 @@ create table if not exists cheki_orders (
   tracking_sent_at bigint,
   synced_at        timestamptz default now()
 );
+
+-- กันข้อมูลลูกค้า (ที่อยู่/ผู้ซื้อ) ไม่ให้อ่านได้จาก public/anon key.
+-- เปิด RLS โดยไม่ใส่ policy = anon เข้าไม่ได้เลย, ส่วน service_role (ที่บอทใช้) bypass ได้ปกติ
+alter table cheki_orders enable row level security;
 ```
 
 ## 2. เอา URL + Key มาใส่ `.env`
