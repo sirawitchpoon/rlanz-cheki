@@ -145,6 +145,24 @@ async function buildControlPayload(item, config, buyerUserId) {
   };
 }
 
+// Slug for the drop's cashier channels, taken from the drop name (the part
+// before " - ", so "Alya - Drop" -> "alya"). Keeps unicode letters/numbers.
+function dropSlug(drop) {
+  const base = (((drop && drop.name) || '').split(' - ')[0] || '').trim().toLowerCase();
+  return base
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}\p{M}_-]/gu, '') // \p{M} keeps Thai vowel/tone marks
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+// Channel name for an item's cashier room: "<drop>-slot-N" (e.g. alya-slot-1),
+// falling back to "pay-slot-N" when the drop has no usable name.
+function channelNameFor(drop, slot) {
+  const slug = dropSlug(drop);
+  return slug ? `${slug}-slot-${slot}` : `pay-slot-${slot}`;
+}
+
 // Ensure a private channel exists for this item, is permissioned to buyerUserId,
 // has clean history, and shows a fresh control/QR message. Used both for the
 // first #1 and for every advance to a new buyer.
@@ -162,11 +180,12 @@ async function assign(itemId, buyerUserId) {
     await channel.permissionOverwrites.set(buildOverwrites(guild, config, buyerUserId));
     await safeBulkDelete(channel);
   } else {
+    const drop = repo.getDrop(item.drop_id);
     channel = await guild.channels.create({
-      name: `pay-slot-${item.slot}`,
+      name: channelNameFor(drop, item.slot),
       type: ChannelType.GuildText,
       parent: config.ticket_category_id || undefined,
-      topic: `ห้องชำระเงินส่วนตัว เชกิลายที่ ${item.slot}`,
+      topic: `ห้องชำระเงินส่วนตัว${drop && drop.name ? ` — ${drop.name}` : ''} เชกิลายที่ ${item.slot}`,
       permissionOverwrites: buildOverwrites(guild, config, buyerUserId),
     });
     repo.setTicketChannel(itemId, channel.id);
@@ -308,4 +327,4 @@ async function cleanupAll(dropId) {
   return deleted;
 }
 
-module.exports = { assign, lockIdle, cleanupAll, notifyAdmins, notifyTracking, fetchChannelSafe, buildControlPayload };
+module.exports = { assign, lockIdle, cleanupAll, notifyAdmins, notifyTracking, fetchChannelSafe, buildControlPayload, channelNameFor };
