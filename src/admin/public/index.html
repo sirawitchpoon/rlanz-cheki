@@ -204,6 +204,9 @@
   .fld input:focus-visible, .fld textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
   .fld textarea { resize:vertical; }
   .ok-tag { color:var(--ok); font-weight:600; }
+  .img-prev { max-width:100%; max-height:220px; margin-top:2px; display:block; border-radius:8px;
+              border:1px solid var(--border); object-fit:contain; background:var(--ground); }
+  .img-prev[hidden] { display:none; }
 
   @media (max-width:820px){
     .app{ flex-direction:column; }
@@ -487,8 +490,15 @@ function openEditItem(id){
     `<label class="fld">ชื่อลาย<input id="f-title" value="${esc(it.title||'')}" placeholder="เช่น R1"></label>
      <label class="fld">คำอธิบาย (ไม่บังคับ)<textarea id="f-desc" rows="2">${esc(it.description||'')}</textarea></label>
      <label class="fld">ราคา (บาท)<input id="f-price" type="number" min="0" step="0.01" value="${it.priceSatang!=null?it.priceSatang/100:''}" placeholder="250"></label>
-     <label class="fld">รูปเชกิ ${it.hasImage?'<span class="ok-tag">มีรูปแล้ว ✓</span>':''}<input id="f-image" type="file" accept="image/*"></label>`,
+     <label class="fld">รูปเชกิ ${it.hasImage?'<span class="ok-tag">มีรูปแล้ว ✓</span>':''}<input id="f-image" type="file" accept="image/*" onchange="previewFile()"></label>
+     <img id="f-img-prev" class="img-prev" ${it.hasImage?`src="/api/items/${id}/image?t=${Date.now()}"`:'hidden'} alt="ตัวอย่างรูปเชกิ">`,
     ()=>saveItem(id));
+}
+function previewFile(){
+  const inp=document.getElementById('f-image'), img=document.getElementById('f-img-prev');
+  const f=inp&&inp.files&&inp.files[0];
+  if(!f||!img) return;
+  img.src=URL.createObjectURL(f); img.hidden=false;
 }
 function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
 async function saveItem(id){
