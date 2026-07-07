@@ -208,6 +208,27 @@
               border:1px solid var(--border); object-fit:contain; background:var(--ground); }
   .img-prev[hidden] { display:none; }
 
+  /* magnifier + sale-message (public embed) preview */
+  .card-foot { display:flex; justify-content:flex-end; margin-top:11px; }
+  .mag { font:inherit; font-size:12px; padding:5px 10px; border-radius:8px; border:1px solid var(--border-strong);
+         background:transparent; color:var(--muted); cursor:pointer; }
+  .mag:hover { border-color:var(--accent); color:var(--accent); }
+  .sale-embed { background:var(--surface-2); border:1px solid var(--border); border-left:4px solid var(--draft);
+                border-radius:6px; padding:12px 14px; }
+  .se-title { font-weight:700; font-size:15px; margin-bottom:8px; }
+  .se-desc { font-size:13px; color:var(--ink-2); margin-bottom:8px; }
+  .se-fields { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:10px; }
+  .se-flabel { font-size:11px; font-weight:700; color:var(--ink); }
+  .se-fval { font-size:13px; color:var(--ink-2); margin-top:2px; }
+  .se-img { width:100%; max-height:340px; object-fit:contain; border-radius:6px; background:var(--ground); display:block; }
+  .se-noimg { padding:28px; text-align:center; color:var(--faint); border:1px dashed var(--border-strong); border-radius:6px; }
+  .se-footer { font-size:11px; color:var(--faint); margin-top:9px; }
+  .se-btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .se-btn { font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:6px; border:0; color:#fff; opacity:.9; cursor:default; }
+  .se-btn.green { background:#3ba55d; } .se-btn.gray { background:#4f545c; } .se-btn.red { background:#ed4245; }
+  .se-btn[disabled] { opacity:.5; }
+  .se-note { font-size:11px; color:var(--faint); margin-top:11px; }
+
   @media (max-width:820px){
     .app{ flex-direction:column; }
     .sidebar{ width:auto; flex:none; height:auto; position:sticky; top:0; z-index:20;
@@ -403,6 +424,7 @@ function card(it){
       <dt>ผู้ซื้อ</dt><dd class="mono" title="${esc(buyer||'')}">${buyer?esc(buyer):'—'}</dd>
     </dl>
     <div class="sep"></div>${block}
+    <div class="card-foot"><button class="mag" title="พรีวิวข้อความขายใน Discord" onclick="previewSale(${it.id})">🔍 พรีวิว</button></div>
   </div>`;
 }
 
@@ -465,10 +487,50 @@ async function saveRecipient(id){
 function openModal(title, bodyHtml, onSave){
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=bodyHtml;
-  document.getElementById('modal-save').onclick=onSave;
+  const save=document.getElementById('modal-save'); save.style.display=''; save.onclick=onSave;
+  document.getElementById('modal').hidden=false;
+}
+function openPreview(title, bodyHtml){
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').innerHTML=bodyHtml;
+  document.getElementById('modal-save').style.display='none';   // read-only: no save button
   document.getElementById('modal').hidden=false;
 }
 function closeModal(){ document.getElementById('modal').hidden=true; }
+
+// Mock of the public sale embed (what buyers see in Discord) — mirrors embedService.
+const EMBED_STATUS={ available:{emoji:'🟢',label:'ว่าง (เปิดจอง)',color:'#57f287'},
+  reserved:{emoji:'🟡',label:'กำลังชำระเงิน',color:'#fee75c'},
+  sold:{emoji:'🔴',label:'ขายแล้ว',color:'#ed4245'},
+  draft:{emoji:'⚪',label:'ยังไม่เปิดขาย',color:'#99aab5'} };
+function saleFooter(s){
+  if(s==='sold') return 'ปิดการขายแล้ว ขอบคุณค่ะ 💖';
+  if(s==='reserved') return 'มีผู้ซื้อกำลังชำระเงิน — กดจองเพื่อต่อคิวสำรองได้';
+  return 'กด "จอง" เพื่อเข้าคิว · คิวแรกที่ยืนยันได้สิทธิ์ซื้อ';
+}
+function saleEmbedHtml(it){
+  const m=EMBED_STATUS[it.status]||EMBED_STATUS.draft;
+  const dis=it.status==='sold'?'disabled':'';
+  const img=it.hasImage?`<img class="se-img" src="/api/items/${it.id}/image?t=${Date.now()}" alt="">`:'<div class="se-noimg">— ยังไม่มีรูป (อัปรูปก่อนเปิดขาย) —</div>';
+  return `<div class="sale-embed" style="border-left-color:${m.color}">
+    <div class="se-title">เชกิลายที่ ${it.slot}${it.title?(' — '+esc(it.title)):''}</div>
+    ${it.description?`<div class="se-desc">${esc(it.description)}</div>`:''}
+    <div class="se-fields">
+      <div><div class="se-flabel">ราคา</div><div class="se-fval">${esc(it.price||'-')}</div></div>
+      <div><div class="se-flabel">สถานะ</div><div class="se-fval">${m.emoji} ${esc(m.label)}</div></div>
+      <div><div class="se-flabel">คิว</div><div class="se-fval">${it.queueCount} คน</div></div>
+    </div>
+    ${img}
+    <div class="se-footer">${saleFooter(it.status)}</div>
+  </div>
+  <div class="se-btns">
+    <button class="se-btn green" ${dis}>🎟️ จอง</button>
+    <button class="se-btn gray" ${dis}>🔢 เช็คคิว</button>
+    <button class="se-btn red" ${dis}>✖️ ยกเลิกการจอง</button>
+  </div>
+  <div class="se-note">* ตัวอย่างเท่านั้น — ปุ่มจริงจะกดได้ในห้องประกาศตอนเปิดขาย${it.status==='sold'?' (ลายนี้ปิดการขายแล้ว ปุ่มถูกปิด)':''}</div>`;
+}
+function previewSale(id){ const it=itemsById[id]; if(it) openPreview('พรีวิวข้อความขาย (Discord)', saleEmbedHtml(it)); }
 
 function openCreateDrop(){
   openModal('สร้างดรอปใหม่',
