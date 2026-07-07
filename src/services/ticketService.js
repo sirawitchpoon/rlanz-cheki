@@ -234,6 +234,11 @@ async function notifyTracking(itemId, trackingNo, carrierId) {
   if (!channel) throw new Error('no_channel');
 
   const carrier = getCarrier(carrierId); // null if unknown/none
+  const order = repo.getOrderByItem(itemId);
+  const recipient = order && order.recipient_name;
+  const fields = [];
+  if (recipient) fields.push({ name: '📮 ผู้รับ', value: recipient });
+  fields.push({ name: 'เลขติดตามพัสดุ', value: `\`\`\`\n${tracking}\n\`\`\`` });
   const embed = new EmbedBuilder()
     .setColor(carrier ? carrier.color : 0x57f287) // carrier brand colour (else green)
     .setTitle('📦 พัสดุจัดส่งแล้ว!')
@@ -242,7 +247,7 @@ async function notifyTracking(itemId, trackingNo, carrierId) {
         (carrier ? `ขนส่ง: **${carrier.name}**\n` : '') +
         'ขอบคุณที่อุดหนุนนะคะ 💖',
     )
-    .addFields({ name: 'เลขติดตามพัสดุ', value: `\`\`\`\n${tracking}\n\`\`\`` })
+    .addFields(...fields)
     .setFooter({ text: `Rlanz CAFÉ${carrier ? ` · ${carrier.name}` : ''}` });
 
   // Attach the cheki image as the embed thumbnail if we have it locally.

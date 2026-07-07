@@ -25,6 +25,7 @@ function rowFor(o) {
     slot: o.slot,
     title: o.title,
     buyer_user_id: o.buyer_user_id,
+    recipient_name: o.recipient_name,
     price_satang: o.price_satang,
     shipping_note: o.shipping_note,
     sold_at: o.sold_at,

@@ -174,6 +174,9 @@
   .ep-link { display:inline-block; margin-top:9px; font-size:12px; font-weight:600; color:var(--ink-2);
              background:var(--ground); border:1px solid var(--border-strong); border-radius:6px; padding:5px 11px; }
   .ep-link[hidden] { display:none; }
+  .ep-recipient { font-size:12.5px; color:var(--ink-2); margin-bottom:6px; font-weight:600; }
+  .ep-recipient[hidden] { display:none; }
+  .rn.saved { border-color:var(--ok) !important; }
 
   .carrier-pick { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
   .carrier-btn { display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12px; padding:5px 10px;
@@ -324,6 +327,7 @@ function embedPreviewHtml(it){
       <div class="ep-body">
         <div class="ep-title">📦 พัสดุจัดส่งแล้ว!</div>
         <div class="ep-desc">เชกิลายที่ ${it.slot}${it.title?(' — '+esc(it.title)):''} ออกเดินทางแล้ว 🚚<br><span class="ep-carrier"></span><br>ขอบคุณที่อุดหนุนนะคะ 💖</div>
+        <div class="ep-recipient" hidden></div>
         <div class="ep-flabel">เลขติดตามพัสดุ</div><div><code class="ep-track"></code></div>
         <div class="ep-link" hidden></div>
         <div class="ep-footer">Rlanz CAFÉ</div>
@@ -338,6 +342,10 @@ function updatePreview(id){
   if(!v){ ep.hidden=true; return; }
   ep.hidden=false;
   ep.querySelector('.ep-track').textContent=v;
+  const rn=document.getElementById('rn-'+id);
+  const rname=((rn&&rn.value)||'').trim();
+  const recEl=ep.querySelector('.ep-recipient');
+  if(recEl){ if(rname){ recEl.hidden=false; recEl.textContent='📮 ผู้รับ: '+rname; } else { recEl.hidden=true; } }
   const c=carrierById[pickedCarrier[id]];
   const epcard=ep.querySelector('.ep-card'), carLine=ep.querySelector('.ep-carrier'), link=ep.querySelector('.ep-link');
   if(c){
@@ -367,8 +375,9 @@ function card(it){
   let block;
   if(it.status==='sold'){
     if(!(it.id in pickedCarrier)) pickedCarrier[it.id]= it.trackingCarrier || (CARRIERS[0]&&CARRIERS[0].id) || null;
-    const sent=it.trackingNo?`<div class="sent">ส่งเลขแทร็กแล้ว <span class="no">${esc(it.trackingNo)}</span>${it.trackingCarrier&&carrierById[it.trackingCarrier]?(' · '+esc(carrierById[it.trackingCarrier].name)):''}</div>`:'';
+    const sent=it.trackingNo?`<div class="sent">ส่งเลขแทร็กแล้ว <span class="no">${esc(it.trackingNo)}</span>${it.trackingCarrier&&carrierById[it.trackingCarrier]?(' · '+esc(carrierById[it.trackingCarrier].name)):''}${it.recipientName?(' · ถึง '+esc(it.recipientName)):''}</div>`:'';
     block=`${sent}
+      <div class="track"><input id="rn-${it.id}" class="rn" placeholder="ชื่อผู้รับ (สำหรับจัดส่ง)" value="${esc(it.recipientName||'')}" oninput="updatePreview(${it.id})"><button onclick="saveRecipient(${it.id})">บันทึกชื่อ</button></div>
       ${carrierPickHtml(it)}
       <div class="track"><input id="tk-${it.id}" placeholder="${it.trackingNo?'แก้ / ส่งซ้ำ…':'เลขติดตามพัสดุ…'}" oninput="updatePreview(${it.id})"><button class="primary" onclick="track(${it.id})">📦 ${it.trackingNo?'ส่งซ้ำ':'ส่งเลขแทร็ก'}</button></div>
       ${embedPreviewHtml(it)}`;
@@ -436,8 +445,17 @@ async function track(id){
   const el=document.getElementById('tk-'+id); const v=(el.value||'').trim();
   if(!v){ showErr('ใส่เลขติดตามพัสดุก่อน'); el.focus(); return; }
   const c=carrierById[pickedCarrier[id]];
-  if(!confirm(`ส่งเลขแทร็ก "${v}"${c?(' ('+c.name+')'):''} ไปหาผู้ซื้อในห้องของเขา?`)) return;
-  try{ await api('/api/items/'+id+'/track','POST',{trackingNo:v, carrier:pickedCarrier[id]||null}); await reloadAll(); }catch(e){ showErr(e.message); }
+  const rn=document.getElementById('rn-'+id); const recipient=((rn&&rn.value)||'').trim();
+  if(!confirm(`ส่งเลขแทร็ก "${v}"${c?(' ('+c.name+')'):''}${recipient?(' ถึง '+recipient):''} ไปหาผู้ซื้อในห้องของเขา?`)) return;
+  try{ await api('/api/items/'+id+'/track','POST',{trackingNo:v, carrier:pickedCarrier[id]||null, recipient}); await reloadAll(); }catch(e){ showErr(e.message); }
+}
+async function saveRecipient(id){
+  const rn=document.getElementById('rn-'+id); const v=((rn&&rn.value)||'').trim();
+  try{
+    await api('/api/items/'+id+'/order','PATCH',{recipient:v});
+    if(itemsById[id]) itemsById[id].recipientName=v||null;
+    rn.classList.add('saved'); setTimeout(()=>rn.classList.remove('saved'),1200);
+  }catch(e){ showErr(e.message); }
 }
 
 // --- modal / create / edit ---
