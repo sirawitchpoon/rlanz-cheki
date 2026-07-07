@@ -23,6 +23,7 @@ const qrService = require('./qrService');
 const { formatBaht } = require('./embedService');
 const { ids } = require('../interactions/ids');
 const { getCarrier } = require('../lib/carriers');
+const supabaseSync = require('./supabaseSync');
 
 async function fetchChannelSafe(channelId) {
   if (!channelId) return null;
@@ -274,6 +275,7 @@ async function notifyTracking(itemId, trackingNo, carrierId) {
     allowedMentions: { users: [buyerId] },
   });
   repo.setOrderTracking(itemId, tracking, carrier ? carrier.id : null);
+  supabaseSync.syncOrder(itemId).catch(() => {}); // best-effort cloud backup
   logger.info(`tracking for item ${itemId} sent to ${buyerId} via ${carrier ? carrier.id : 'none'}`);
   return { buyerId, channelId: channel.id, tracking, carrier: carrier ? carrier.id : null };
 }

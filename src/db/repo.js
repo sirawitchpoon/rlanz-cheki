@@ -128,6 +128,7 @@ const stmt = {
     VALUES (@item_id, @drop_id, @slot, @title, @buyer_user_id, @price_satang, @shipping_note, @sold_at)
   `),
   getOrdersByDrop: db.prepare('SELECT * FROM won_orders WHERE drop_id = ? ORDER BY slot ASC'),
+  getAllOrders: db.prepare('SELECT * FROM won_orders ORDER BY sold_at DESC'),
   getOrderByItem: db.prepare('SELECT * FROM won_orders WHERE item_id = ? ORDER BY id DESC LIMIT 1'),
   setOrderTracking: db.prepare(
     'UPDATE won_orders SET tracking_no = ?, tracking_carrier = ?, tracking_sent_at = ? WHERE item_id = ?',
@@ -405,6 +406,9 @@ function setTicketQrMessage(itemId, messageId) {
 function getOrdersByDrop(dropId) {
   return stmt.getOrdersByDrop.all(dropId);
 }
+function getAllOrders() {
+  return stmt.getAllOrders.all();
+}
 function getOrderByItem(itemId) {
   return stmt.getOrderByItem.get(itemId) || null;
 }
@@ -464,6 +468,7 @@ module.exports = {
   setTicketQrMessage,
   // orders
   getOrdersByDrop,
+  getAllOrders,
   getOrderByItem,
   setOrderTracking,
 };
