@@ -21,7 +21,9 @@
 // It is OPT-IN: index.js only starts it when ADMIN_PORT is set, and a missing
 // `express` dependency degrades to a logged warning instead of crashing the bot.
 
+const fs = require('fs');
 const path = require('path');
+const config = require('../config');
 const repo = require('../db/repo');
 const ctx = require('../lib/context');
 const logger = require('../logger');
@@ -60,6 +62,8 @@ function itemView(item) {
     id: item.id,
     slot: item.slot,
     title: item.title,
+    description: item.description,
+    hasImage: !!item.image_path,
     status: item.status,
     statusLabel: STATUS_LABEL[item.status] || item.status,
     price: embedService.formatBaht(item.price_satang),
@@ -96,7 +100,7 @@ function dropView(drop) {
 // without binding a port.
 function buildApp(express) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '16mb' })); // room for base64 image uploads
 
   const allowedEmails = (process.env.ADMIN_ALLOWED_EMAILS || '')
     .split(',')
@@ -104,19 +108,40 @@ function buildApp(express) {
     .filter(Boolean);
   const token = process.env.ADMIN_TOKEN || null;
 
+  const parseCookies = (req) => {
+    const raw = req.headers.cookie;
+    if (!raw) return {};
+    return Object.fromEntries(
+      raw.split(';').map((c) => {
+        const i = c.indexOf('=');
+        return [c.slice(0, i).trim(), decodeURIComponent(c.slice(i + 1))];
+      }),
+    );
+  };
+
   // --- Auth gate -----------------------------------------------------------
+  // Order: Cloudflare Access email (production w/ domain) → shared token via
+  // header / ?token= / session cookie. When the token arrives in the query the
+  // first time, we stash it in an HttpOnly cookie so it doesn't have to live in
+  // the URL afterwards (important over a public Quick Tunnel URL).
   app.use((req, res, next) => {
-    // 1) Cloudflare Access verified email (the production path).
     const email = (req.get('Cf-Access-Authenticated-User-Email') || '').toLowerCase();
     if (email && (allowedEmails.length === 0 || allowedEmails.includes(email))) {
       req.adminEmail = email;
       return next();
     }
-    // 2) Shared token (local testing / no-Cloudflare path).
-    const supplied = req.get('X-Admin-Token') || req.query.token;
-    if (token && supplied === token) {
-      req.adminEmail = 'token';
-      return next();
+    if (token) {
+      const supplied = req.get('X-Admin-Token') || req.query.token || parseCookies(req).admin_session;
+      if (supplied === token) {
+        if (req.query.token) {
+          res.setHeader(
+            'Set-Cookie',
+            `admin_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`,
+          );
+        }
+        req.adminEmail = 'token';
+        return next();
+      }
     }
     return res.status(401).json({ error: 'unauthorized' });
   });
@@ -155,6 +180,16 @@ function buildApp(express) {
       state: d.state,
     }));
     res.json({ drops });
+  }));
+
+  // Create a new drop (optionally named, with N blank slots). Pure DB — replaces
+  // needing /cheki init in Discord.
+  app.post('/api/drops', wrap((req, res) => {
+    const body = req.body || {};
+    const id = repo.createDropWithItems(body.count ? Number(body.count) : 5);
+    if (typeof body.name === 'string' && body.name.trim()) repo.setDropName(id, body.name.trim());
+    logger.info(`admin(${req.adminEmail}) created drop ${id}`);
+    res.json({ ok: true, drop: dropView(repo.getDrop(id)) });
   }));
 
   app.get('/api/drops/:id', wrap((req, res) => {
@@ -203,6 +238,58 @@ function buildApp(express) {
     const deleted = await ticketService.cleanupAll(id);
     logger.info(`admin(${req.adminEmail}) cleaned up drop ${id}: ${deleted} channel(s)`);
     res.json({ ok: true, deleted });
+  }));
+
+  // Edit an item's title / description / price (baht). Pure DB — replaces the
+  // setup-panel edit modal. Refreshes the public embed if the drop is live.
+  app.patch('/api/items/:id', wrap((req, res) => {
+    const id = Number(req.params.id);
+    const item = repo.getItem(id);
+    if (!item) return res.status(404).json({ error: 'no_item' });
+    const b = req.body || {};
+    let priceSatang = item.price_satang;
+    if (b.priceBaht != null && String(b.priceBaht).trim() !== '') {
+      const n = Number(b.priceBaht);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'bad_price' });
+      priceSatang = Math.round(n * 100);
+    }
+    repo.updateItemDetails(id, {
+      title: b.title != null ? String(b.title).trim() : item.title,
+      description: b.description != null ? String(b.description).trim() || null : item.description,
+      priceSatang,
+    });
+    if (ctx.isReady()) embedService.refreshItem(id).catch(() => {});
+    res.json({ ok: true, item: itemView(repo.getItem(id)) });
+  }));
+
+  const IMG_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+  // Upload/replace an item image (base64 JSON, so no multipart dependency).
+  app.post('/api/items/:id/image', wrap((req, res) => {
+    const id = Number(req.params.id);
+    const item = repo.getItem(id);
+    if (!item) return res.status(404).json({ error: 'no_item' });
+    const { filename, dataBase64 } = req.body || {};
+    if (!dataBase64) return res.status(400).json({ error: 'no_data' });
+    const ext = (path.extname(filename || '') || '.png').toLowerCase();
+    if (!IMG_EXT.has(ext)) return res.status(400).json({ error: 'bad_type' });
+    const buf = Buffer.from(String(dataBase64).replace(/^data:[^;]+;base64,/, ''), 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'empty' });
+    const dir = path.join(config.imagesDir, String(item.drop_id));
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = path.join(dir, `${item.slot}${ext}`);
+    fs.writeFileSync(dest, buf);
+    repo.setItemImage(id, dest, filename || `${item.slot}${ext}`);
+    if (ctx.isReady()) embedService.refreshItem(id).catch(() => {});
+    logger.info(`admin(${req.adminEmail}) set image for item ${id}`);
+    res.json({ ok: true, item: itemView(repo.getItem(id)) });
+  }));
+
+  // Serve an item's image file (for the dashboard's tracking-embed preview).
+  // Behind the same auth middleware; the browser sends the session cookie.
+  app.get('/api/items/:id/image', wrap((req, res) => {
+    const item = repo.getItem(Number(req.params.id));
+    if (!item || !item.image_path || !fs.existsSync(item.image_path)) return res.status(404).end();
+    return res.sendFile(item.image_path);
   }));
 
   // Skip the current #1 of an item and advance the queue (admin "ปล่อยคิว").

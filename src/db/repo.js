@@ -200,11 +200,13 @@ function setDropPublished(id) {
   stmt.setDropPublished.run(nowSeconds(), id);
 }
 
-// Create a fresh drop with 5 placeholder items and their ticket rows.
-const createDropWithItems = db.transaction(() => {
+// Create a fresh drop with `count` placeholder items (default 5, clamped 1..20)
+// and their ticket rows.
+const createDropWithItems = db.transaction((count = 5) => {
+  const n = Math.max(1, Math.min(20, Number(count) || 5));
   const info = stmt.insertDrop.run(nowSeconds());
   const dropId = Number(info.lastInsertRowid);
-  for (let slot = 1; slot <= 5; slot += 1) {
+  for (let slot = 1; slot <= n; slot += 1) {
     const itemInfo = stmt.insertItem.run(dropId, slot);
     stmt.insertTicket.run(Number(itemInfo.lastInsertRowid), nowSeconds());
   }
