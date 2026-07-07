@@ -9,6 +9,7 @@ const mutex = require('../lib/mutex');
 const logger = require('../logger');
 const ticketService = require('./ticketService');
 const embedService = require('./embedService');
+const supabaseSync = require('./supabaseSync');
 
 // Open (or re-open) the private ticket channel for the current #1 buyer.
 // ticketService.assign is idempotent, so this is safe for the first #1 and for
@@ -111,6 +112,7 @@ async function confirmSold(itemId, buyerUserId, shippingNote) {
     const res = repo.confirmSold(itemId, buyerUserId, shippingNote);
     if (res.error || res.already) return res;
     await embedService.refreshItem(itemId);
+    supabaseSync.syncOrder(itemId).catch(() => {}); // best-effort cloud backup
 
     // If the whole drop is now sold out, mark it done.
     const item = res.item;
