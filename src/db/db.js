@@ -36,6 +36,12 @@ function ensureColumn(table, column, typeDdl) {
   }
 }
 ensureColumn('config', 'qr_image_path', 'TEXT');
+ensureColumn('won_orders', 'tracking_no', 'TEXT');
+ensureColumn('won_orders', 'tracking_sent_at', 'INTEGER');
+// Per-drop display name (e.g. "Stelle - Drop") and its own announce channel
+// (overrides config.announce_channel_id so each drop can post to its own room).
+ensureColumn('drops', 'name', 'TEXT');
+ensureColumn('drops', 'announce_channel_id', 'TEXT');
 
 // Seed the monotonic counter row once.
 db.prepare('INSERT OR IGNORE INTO seq_counter (id, val) VALUES (1, 0)').run();

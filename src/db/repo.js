@@ -35,10 +35,13 @@ const stmt = {
     "SELECT * FROM drops WHERE state NOT IN ('done','cancelled') ORDER BY id DESC LIMIT 1",
   ),
   getLatestDrop: db.prepare('SELECT * FROM drops ORDER BY id DESC LIMIT 1'),
+  getAllDrops: db.prepare('SELECT * FROM drops ORDER BY id DESC LIMIT 100'),
   getDropsToRehydrate: db.prepare(
     "SELECT * FROM drops WHERE state IN ('scheduled','teasing','live')",
   ),
   setDropState: db.prepare('UPDATE drops SET state = ? WHERE id = ?'),
+  setDropName: db.prepare('UPDATE drops SET name = ? WHERE id = ?'),
+  setDropAnnounceChannel: db.prepare('UPDATE drops SET announce_channel_id = ? WHERE id = ?'),
   setDropTimes: db.prepare('UPDATE drops SET publish_at = ?, teaser_at = ? WHERE id = ?'),
   setDropPanel: db.prepare(
     'UPDATE drops SET panel_channel_id = ?, panel_message_id = ? WHERE id = ?',
@@ -125,6 +128,10 @@ const stmt = {
     VALUES (@item_id, @drop_id, @slot, @title, @buyer_user_id, @price_satang, @shipping_note, @sold_at)
   `),
   getOrdersByDrop: db.prepare('SELECT * FROM won_orders WHERE drop_id = ? ORDER BY slot ASC'),
+  getOrderByItem: db.prepare('SELECT * FROM won_orders WHERE item_id = ? ORDER BY id DESC LIMIT 1'),
+  setOrderTracking: db.prepare(
+    'UPDATE won_orders SET tracking_no = ?, tracking_sent_at = ? WHERE item_id = ?',
+  ),
 };
 
 /* -------------------------------- config --------------------------------- */
@@ -162,11 +169,26 @@ function getCurrentDrop() {
 function getLatestDrop() {
   return stmt.getLatestDrop.get() || null;
 }
+function getAllDrops() {
+  return stmt.getAllDrops.all();
+}
 function getDropsToRehydrate() {
   return stmt.getDropsToRehydrate.all();
 }
 function setDropState(id, state) {
   stmt.setDropState.run(state, id);
+}
+function setDropName(id, name) {
+  stmt.setDropName.run(name, id);
+}
+function setDropAnnounceChannel(id, channelId) {
+  stmt.setDropAnnounceChannel.run(channelId, id);
+}
+// The channel a drop posts to: its own override, else the global config channel.
+function announceChannelFor(drop) {
+  if (drop && drop.announce_channel_id) return drop.announce_channel_id;
+  const cfg = getConfig();
+  return cfg ? cfg.announce_channel_id : null;
 }
 function setDropTimes(id, publishAt, teaserAt) {
   stmt.setDropTimes.run(publishAt, teaserAt, id);
@@ -381,6 +403,12 @@ function setTicketQrMessage(itemId, messageId) {
 function getOrdersByDrop(dropId) {
   return stmt.getOrdersByDrop.all(dropId);
 }
+function getOrderByItem(itemId) {
+  return stmt.getOrderByItem.get(itemId) || null;
+}
+function setOrderTracking(itemId, trackingNo) {
+  stmt.setOrderTracking.run(trackingNo, nowSeconds(), itemId);
+}
 
 module.exports = {
   // config
@@ -390,8 +418,12 @@ module.exports = {
   getDrop,
   getCurrentDrop,
   getLatestDrop,
+  getAllDrops,
   getDropsToRehydrate,
   setDropState,
+  setDropName,
+  setDropAnnounceChannel,
+  announceChannelFor,
   setDropTimes,
   setDropPanel,
   setDropPublished,
@@ -430,4 +462,6 @@ module.exports = {
   setTicketQrMessage,
   // orders
   getOrdersByDrop,
+  getOrderByItem,
+  setOrderTracking,
 };

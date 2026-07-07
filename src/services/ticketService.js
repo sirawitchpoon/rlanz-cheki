@@ -217,6 +217,32 @@ async function notifyAdmins(text) {
   }
 }
 
+// Post a shipping/tracking notice into a sold item's private channel, mentioning
+// the buyer, and record the tracking number on the order. Throws (with a short
+// code) if the item/buyer/channel is missing so the caller can report why.
+async function notifyTracking(itemId, trackingNo) {
+  const tracking = String(trackingNo || '').trim();
+  if (!tracking) throw new Error('no_tracking');
+  const item = repo.getItem(itemId);
+  if (!item) throw new Error('no_item');
+  const ticket = repo.getTicket(itemId);
+  const buyerId = (ticket && ticket.buyer_user_id) || item.buyer_user_id;
+  if (!buyerId) throw new Error('no_buyer');
+  const channel = await fetchChannelSafe(ticket && ticket.channel_id);
+  if (!channel) throw new Error('no_channel');
+
+  await channel.send({
+    content:
+      `📦 <@${buyerId}> พัสดุเชกิลายที่ ${item.slot}${item.title ? ` (${item.title})` : ''} จัดส่งแล้วค่ะ!\n` +
+      `เลขติดตามพัสดุ: **${tracking}**\n` +
+      'ขอบคุณที่อุดหนุนนะคะ ตรวจสอบสถานะพัสดุได้จากเลขด้านบนเลยค่ะ 💖',
+    allowedMentions: { users: [buyerId] },
+  });
+  repo.setOrderTracking(itemId, tracking);
+  logger.info(`tracking for item ${itemId} sent to ${buyerId} in ${channel.id}`);
+  return { buyerId, channelId: channel.id, tracking };
+}
+
 // Delete every ticket channel of a drop and reset the rows. The ONLY deletion path.
 async function cleanupAll(dropId) {
   const tickets = repo.getTicketsByDrop(dropId);
@@ -240,4 +266,4 @@ async function cleanupAll(dropId) {
   return deleted;
 }
 
-module.exports = { assign, lockIdle, cleanupAll, notifyAdmins, fetchChannelSafe, buildControlPayload };
+module.exports = { assign, lockIdle, cleanupAll, notifyAdmins, notifyTracking, fetchChannelSafe, buildControlPayload };

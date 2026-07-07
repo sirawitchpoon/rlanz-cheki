@@ -132,10 +132,12 @@ function buildTeaserPayload(item, publishAt) {
 async function refreshItem(itemId) {
   const item = repo.getItem(itemId);
   if (!item || !item.public_message_id) return;
-  const config = repo.getConfig();
-  if (!config || !config.announce_channel_id) return;
+  // Resolve the channel from the item's own drop (per-drop override), falling
+  // back to the global config channel.
+  const channelId = repo.announceChannelFor(repo.getDrop(item.drop_id));
+  if (!channelId) return;
   try {
-    const channel = await ctx.getClient().channels.fetch(config.announce_channel_id);
+    const channel = await ctx.getClient().channels.fetch(channelId);
     const message = await channel.messages.fetch(item.public_message_id);
     const queueCount = repo.countQueue(itemId);
     await message.edit(buildSalePayload(item, queueCount));
