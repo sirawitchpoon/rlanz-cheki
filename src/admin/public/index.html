@@ -210,7 +210,18 @@
   .img-prev[hidden] { display:none; }
 
   /* magnifier + sale-message (public embed) preview */
-  .card-foot { display:flex; justify-content:flex-end; margin-top:11px; }
+  .card-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:11px; }
+  .q-list { display:flex; flex-direction:column; gap:6px; }
+  .q-row { display:flex; align-items:center; gap:10px; padding:8px 11px; background:var(--surface-2);
+           border:1px solid var(--border); border-radius:9px; }
+  .q-pos { width:24px; height:24px; flex:0 0 auto; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+           font-weight:700; font-size:12px; display:grid; place-items:center; }
+  .q-name { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .q-id { font-family:var(--mono); font-size:12px; color:var(--muted); font-weight:400; }
+  .q-state { font-size:11px; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+  .q-state.active { color:var(--warn); background:color-mix(in srgb,var(--warn) 16%, transparent); }
+  .q-state.waiting { color:var(--muted); background:var(--ground); }
+  .q-empty { color:var(--muted); text-align:center; padding:26px; }
   .mag { font:inherit; font-size:12px; padding:5px 10px; border-radius:8px; border:1px solid var(--border-strong);
          background:transparent; color:var(--muted); cursor:pointer; }
   .mag:hover { border-color:var(--accent); color:var(--accent); }
@@ -426,7 +437,7 @@ function card(it){
       <dt>ผู้ซื้อ</dt><dd class="mono" title="${esc(buyer||'')}">${buyer?esc(buyer):'—'}</dd>
     </dl>
     <div class="sep"></div>${block}
-    <div class="card-foot"><button class="mag" title="พรีวิวข้อความขายใน Discord" onclick="previewSale(${it.id})">🔍 พรีวิว</button></div>
+    <div class="card-foot"><button class="mag" onclick="viewQueue(${it.id})">👥 คิว ${it.queueCount}</button><button class="mag" title="พรีวิวข้อความขายใน Discord" onclick="previewSale(${it.id})">🔍 พรีวิว</button></div>
   </div>`;
 }
 
@@ -533,6 +544,19 @@ function saleEmbedHtml(it){
   <div class="se-note">* ตัวอย่างเท่านั้น — ปุ่มจริงจะกดได้ในห้องประกาศตอนเปิดขาย${it.status==='sold'?' (ลายนี้ปิดการขายแล้ว ปุ่มถูกปิด)':''}</div>`;
 }
 function previewSale(id){ const it=itemsById[id]; if(it) openPreview('พรีวิวข้อความขาย (Discord)', saleEmbedHtml(it)); }
+
+async function viewQueue(id){
+  const it=itemsById[id];
+  try{
+    const { queue }=await api('/api/items/'+id+'/queue');
+    const rows = queue.length ? queue.map(q=>
+      `<div class="q-row"><span class="q-pos">${q.position}</span>
+        <span class="q-name">${q.username?esc(q.username):`<span class="q-id">${esc(q.userId)}</span>`}</span>
+        <span class="q-state ${q.state}">${q.state==='active'?'คิวแรก · กำลังชำระเงิน':'รอคิว'}</span></div>`
+    ).join('') : '<div class="q-empty">ยังไม่มีคนในคิว</div>';
+    openPreview(`คิว — ${esc((it&&(it.title||('ลาย '+it.slot)))||'')} (${queue.length} คน)`, `<div class="q-list">${rows}</div>`);
+  }catch(e){ showErr(e.message); }
+}
 
 function openCreateDrop(){
   openModal('สร้างดรอปใหม่',

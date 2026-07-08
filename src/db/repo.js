@@ -99,6 +99,9 @@ const stmt = {
   activeEntriesForUser: db.prepare(
     "SELECT * FROM queue_entries WHERE user_id = ? AND state = 'active'",
   ),
+  listQueue: db.prepare(
+    "SELECT * FROM queue_entries WHERE item_id = ? AND state IN ('waiting','active') ORDER BY seq ASC",
+  ),
 
   // tickets
   insertTicket: db.prepare(
@@ -273,6 +276,9 @@ function getActiveEntry(itemId) {
 }
 function activeEntriesForUser(userId) {
   return stmt.activeEntriesForUser.all(userId);
+}
+function listQueue(itemId) {
+  return stmt.listQueue.all(itemId);
 }
 
 // Returns the user's current position (1-based) or null if not queued.
@@ -457,6 +463,7 @@ module.exports = {
   countQueue,
   getActiveEntry,
   activeEntriesForUser,
+  listQueue,
   // queue (atomic transactions)
   reserve,
   cancel,
