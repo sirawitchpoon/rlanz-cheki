@@ -204,6 +204,7 @@
   .fld input:focus-visible, .fld textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
   .fld textarea { resize:vertical; }
   .ok-tag { color:var(--ok); font-weight:600; }
+  .hint { font-size:11px; color:var(--faint); margin-top:-4px; line-height:1.5; }
   .img-prev { max-width:100%; max-height:220px; margin-top:2px; display:block; border-radius:8px;
               border:1px solid var(--border); object-fit:contain; background:var(--ground); }
   .img-prev[hidden] { display:none; }
@@ -263,6 +264,7 @@
     <div class="side-title">ดรอปทั้งหมด</div>
     <nav class="navlist" id="navlist"><div class="side-note">กำลังโหลด…</div></nav>
     <div class="create-wrap"><button class="btn-create" onclick="openCreateDrop()">＋ ดรอปใหม่</button></div>
+    <div class="create-wrap"><button class="btn-create" onclick="openSettings()">⚙️ ตั้งค่าระบบ</button></div>
     <div class="side-note">หรือพิมพ์ <code>/cheki init</code> ในดิสก์ก็ได้</div>
     <div class="conn" id="conn"><span class="led"></span> <span id="connlabel">กำลังเชื่อมต่อ…</span></div>
   </aside>
@@ -561,6 +563,34 @@ function previewFile(){
   const f=inp&&inp.files&&inp.files[0];
   if(!f||!img) return;
   img.src=URL.createObjectURL(f); img.hidden=false;
+}
+
+async function openSettings(){
+  let c={};
+  try{ c=(await api('/api/config')).config; }catch(e){ showErr(e.message); return; }
+  openModal('⚙️ ตั้งค่าระบบ',
+    `<label class="fld">รูป QR พร้อมเพย์ ${c.hasQrImage?'<span class="ok-tag">มีแล้ว ✓</span>':''}<input id="s-qr" type="file" accept="image/*" onchange="previewQr()"></label>
+     <img id="s-qr-prev" class="img-prev" ${c.hasQrImage?`src="/api/config/qr-image?t=${Date.now()}"`:'hidden'} alt="QR พร้อมเพย์">
+     <div class="hint">อัปรูป QR = ลูกค้าสแกนแล้วกรอกยอดเอง (ยอด = ราคาลาย)</div>
+     <label class="fld">พร้อมเพย์ เบอร์/เลขบัตร (ไม่บังคับ)<input id="s-pp" value="${esc(c.promptpayId||'')}" placeholder="ใส่ถ้าอยากให้บอทสร้าง QR ฝังยอด (ถ้ามีรูป QR ด้านบน รูปจะถูกใช้แทน)"></label>
+     <label class="fld">ห้องประกาศขาย — Channel ID ${c.announceChannelName?`<span class="ok-tag">#${esc(c.announceChannelName)}</span>`:''}<input id="s-ann" value="${esc(c.announceChannelId||'')}" placeholder="วาง ID ห้อง (คลิกขวาห้อง → Copy Channel ID)"></label>
+     <label class="fld">Category ห้องจ่ายเงิน — Category ID ${c.ticketCategoryName?`<span class="ok-tag">${esc(c.ticketCategoryName)}</span>`:''}<input id="s-cat" value="${esc(c.ticketCategoryId||'')}" placeholder="วาง ID หมวดหมู่ CASHIER"></label>
+     <label class="fld">Admin Role — Role ID ${c.adminRoleName?`<span class="ok-tag">@${esc(c.adminRoleName)}</span>`:''}<input id="s-role" value="${esc(c.adminRoleId||'')}" placeholder="วาง ID role แอดมิน"></label>
+     <div class="hint">เปิด Developer Mode ในดิส (Settings → Advanced) แล้วคลิกขวา → Copy ID${c.clientReady?'':'<br>⚠️ บอทยังไม่ต่อ Discord — ชื่อห้อง/role จะยังไม่ขึ้น'}</div>`,
+    saveSettings);
+}
+function previewQr(){
+  const inp=document.getElementById('s-qr'), img=document.getElementById('s-qr-prev');
+  const f=inp&&inp.files&&inp.files[0]; if(!f||!img) return;
+  img.src=URL.createObjectURL(f); img.hidden=false;
+}
+async function saveSettings(){
+  try{
+    await api('/api/config','PATCH',{ promptpayId:val('s-pp'), announceChannelId:val('s-ann'), ticketCategoryId:val('s-cat'), adminRoleId:val('s-role') });
+    const f=document.getElementById('s-qr').files[0];
+    if(f){ await api('/api/config/qr','POST',{ filename:f.name, dataBase64:await fileToB64(f) }); }
+    closeModal(); document.getElementById('err').textContent=''; await reloadAll();
+  }catch(e){ showErr(e.message); }
 }
 function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
 async function saveItem(id){
