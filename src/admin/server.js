@@ -65,6 +65,27 @@ function roleName(id) {
   }
 }
 
+// Resolve a Discord user id to a display name (server nickname, else global/
+// username). Fetches from Discord and caches — usernames aren't always cached.
+const userNameCache = new Map();
+async function resolveUserName(id) {
+  if (!id || !ctx.isReady()) return null;
+  if (userNameCache.has(id)) return userNameCache.get(id);
+  let name = null;
+  try {
+    const member = await ctx.getGuild().members.fetch(id).catch(() => null);
+    if (member) name = member.displayName || (member.user && member.user.username) || null;
+    else {
+      const user = await ctx.getClient().users.fetch(id).catch(() => null);
+      if (user) name = user.globalName || user.username || null;
+    }
+  } catch {
+    name = null;
+  }
+  userNameCache.set(id, name);
+  return name;
+}
+
 // Shape a single item + its ticket (channel) into a dashboard-friendly row.
 function itemView(item) {
   const ticket = repo.getTicket(item.id);
@@ -307,6 +328,20 @@ function buildApp(express) {
     const item = repo.getItem(Number(req.params.id));
     if (!item || !item.image_path || !fs.existsSync(item.image_path)) return res.status(404).end();
     return res.sendFile(item.image_path);
+  }));
+
+  // Full waitlist for an item, in order, with Discord usernames resolved.
+  app.get('/api/items/:id/queue', wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!repo.getItem(id)) return res.status(404).json({ error: 'no_item' });
+    const entries = repo.listQueue(id);
+    const queue = [];
+    for (let i = 0; i < entries.length; i += 1) {
+      const e = entries[i];
+      // eslint-disable-next-line no-await-in-loop
+      queue.push({ position: i + 1, userId: e.user_id, username: await resolveUserName(e.user_id), state: e.state, joinedAt: e.joined_at });
+    }
+    res.json({ queue });
   }));
 
   // Skip the current #1 of an item and advance the queue (admin "ปล่อยคิว").
