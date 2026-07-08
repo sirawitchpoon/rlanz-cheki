@@ -55,6 +55,16 @@ function channelName(id) {
   }
 }
 
+function roleName(id) {
+  if (!id || !ctx.isReady()) return null;
+  try {
+    const r = ctx.getGuild().roles.cache.get(id);
+    return r && r.name ? r.name : null;
+  } catch {
+    return null;
+  }
+}
+
 // Shape a single item + its ticket (channel) into a dashboard-friendly row.
 function itemView(item) {
   const ticket = repo.getTicket(item.id);
@@ -333,6 +343,63 @@ function buildApp(express) {
     const result = await ticketService.notifyTracking(id, trackingNo, carrier);
     logger.info(`admin(${req.adminEmail}) sent tracking for item ${id}`);
     res.json({ ok: true, result, item: itemView(repo.getItem(id)) });
+  }));
+
+  // --- Settings (config) ---------------------------------------------------
+  app.get('/api/config', wrap((req, res) => {
+    const c = repo.getConfig() || {};
+    res.json({
+      config: {
+        guildId: c.guild_id || config.guildId,
+        promptpayId: c.promptpay_id || '',
+        hasQrImage: !!(c.qr_image_path && fs.existsSync(c.qr_image_path)),
+        announceChannelId: c.announce_channel_id || '',
+        announceChannelName: channelName(c.announce_channel_id),
+        ticketCategoryId: c.ticket_category_id || '',
+        ticketCategoryName: channelName(c.ticket_category_id),
+        adminRoleId: c.admin_role_id || '',
+        adminRoleName: roleName(c.admin_role_id),
+        paymentMode: c.qr_image_path ? 'static-image' : c.promptpay_id ? 'generated' : 'none',
+        clientReady: ctx.isReady(),
+      },
+    });
+  }));
+
+  // Update settings (IDs + promptpay). Only provided fields change. Pure DB.
+  app.patch('/api/config', wrap((req, res) => {
+    const b = req.body || {};
+    const patch = { guild_id: (repo.getConfig() || {}).guild_id || config.guildId };
+    if (typeof b.promptpayId === 'string') patch.promptpay_id = b.promptpayId.replace(/[\s-]/g, '') || null;
+    if (typeof b.announceChannelId === 'string') patch.announce_channel_id = b.announceChannelId.trim() || null;
+    if (typeof b.ticketCategoryId === 'string') patch.ticket_category_id = b.ticketCategoryId.trim() || null;
+    if (typeof b.adminRoleId === 'string') patch.admin_role_id = b.adminRoleId.trim() || null;
+    repo.upsertConfig(patch);
+    logger.info(`admin(${req.adminEmail}) updated config`);
+    res.json({ ok: true });
+  }));
+
+  // Upload/replace the static PromptPay QR image (base64). Takes priority over
+  // a generated QR — the buyer fills the amount themselves.
+  app.post('/api/config/qr', wrap((req, res) => {
+    const { filename, dataBase64 } = req.body || {};
+    if (!dataBase64) return res.status(400).json({ error: 'no_data' });
+    const ext = (path.extname(filename || '') || '.png').toLowerCase();
+    if (!IMG_EXT.has(ext)) return res.status(400).json({ error: 'bad_type' });
+    const buf = Buffer.from(String(dataBase64).replace(/^data:[^;]+;base64,/, ''), 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'empty' });
+    fs.mkdirSync(config.imagesDir, { recursive: true });
+    const dest = path.join(config.imagesDir, `qr${ext}`);
+    fs.writeFileSync(dest, buf);
+    repo.upsertConfig({ guild_id: (repo.getConfig() || {}).guild_id || config.guildId, qr_image_path: dest });
+    logger.info(`admin(${req.adminEmail}) uploaded QR image`);
+    res.json({ ok: true });
+  }));
+
+  // Serve the saved QR image (for the settings preview).
+  app.get('/api/config/qr-image', wrap((req, res) => {
+    const c = repo.getConfig();
+    if (!c || !c.qr_image_path || !fs.existsSync(c.qr_image_path)) return res.status(404).end();
+    return res.sendFile(c.qr_image_path);
   }));
 
   // --- Static dashboard ----------------------------------------------------
