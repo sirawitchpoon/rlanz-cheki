@@ -461,6 +461,7 @@ function renderDrop(d){
     <div class="toolbar">
       <button class="primary" onclick="act('/api/drops/${d.id}/reveal','เปิดขาย ${esc(d.displayName)} เดี๋ยวนี้เลย?')">🚀 เปิดขายตอนนี้</button>
       <button onclick="openSchedule()">⏰ ตั้งเวลา</button>
+      <button onclick="postPreview()">📢 โพสต์การ์ดล่วงหน้า</button>
       <button class="ghost-danger" onclick="act('/api/drops/${d.id}/cancel','ยกเลิก ${esc(d.displayName)}?')">ยกเลิกดรอป</button>
       <button class="ghost-danger" onclick="act('/api/drops/${d.id}/cleanup','ลบห้องชำระเงินทั้งหมด? (ข้อมูลออเดอร์ยังอยู่)')">ลบห้องทั้งหมด</button>
       <button onclick="reloadAll()">↻ รีเฟรช</button>
@@ -564,6 +565,17 @@ const SCHED_ERR={ bad_time:'รูปแบบเวลาไม่ถูกต�
   bad_lead:'นาทีสปอยต้องอยู่ระหว่าง 0–10080', no_announce_channel:'ยังไม่ได้ตั้งห้องประกาศ — ใส่ที่ช่อง "ห้องประกาศดรอปนี้" ด้านบน หรือ ⚙️ ตั้งค่าระบบ',
   no_payment:'ยังไม่ได้ตั้งวิธีรับเงิน — ไปที่ ⚙️ ตั้งค่าระบบ อัปรูป QR ก่อน',
   incomplete_items:'ข้อมูลลายยังไม่ครบ — ต้องมีชื่อ + ราคา + รูป ครบทุกลาย' };
+
+async function postPreview(){
+  const d=currentDrop; if(!d) return;
+  if(!confirm(`โพสต์การ์ดทั้งหมดของ ${d.displayName} ลงห้องประกาศเลยมั้ย?\n\nลูกค้าจะเห็นรูป/ราคา แต่ปุ่มจองจะยังกดไม่ได้จนกว่าจะเปิดขาย`)) return;
+  try{
+    const r=await api('/api/drops/'+d.id+'/preview-post','POST');
+    document.getElementById('err').textContent='';
+    alert(`โพสต์การ์ดแล้ว ${r.result.posted}/${r.result.total} ลาย ✅\nปุ่มจองยังล็อกอยู่ — พอกด "เปิดขายตอนนี้" หรือถึงเวลาที่ตั้งไว้ การ์ดเดิมจะกดได้ทันที`);
+    await reloadAll();
+  }catch(e){ showErr(SCHED_ERR[e.message]||e.message); }
+}
 
 function openSchedule(){
   const d=currentDrop; if(!d) return;
