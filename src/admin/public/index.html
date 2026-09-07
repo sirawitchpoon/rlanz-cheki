@@ -314,6 +314,7 @@ const val=(id)=>{ const el=document.getElementById(id); return el?el.value.trim(
 
 let currentId = Number(localStorage.getItem('chekiDrop')) || null;
 let itemsById = {};
+let currentDrop = null;
 let CARRIERS = [];               // [{id,name,hex}]
 const carrierById = {};
 const pickedCarrier = {};        // itemId -> carrierId (user selection, persists across refresh)
@@ -444,7 +445,7 @@ function card(it){
 function renderDrop(d){
   const el=document.getElementById('content');
   if(!d){ el.innerHTML='<div class="empty">เลือกดรอปจากเมนู หรือกด ＋ ดรอปใหม่</div>'; return; }
-  itemsById={}; d.items.forEach(it=>{ itemsById[it.id]=it; });
+  currentDrop=d; itemsById={}; d.items.forEach(it=>{ itemsById[it.id]=it; });
   el.innerHTML=`
     <div class="drop-head">
       <h1>${esc(d.displayName)}<button class="icon-btn" title="เปลี่ยนชื่อดรอป" onclick="renameDrop(${d.id})">✎</button></h1>
@@ -459,6 +460,7 @@ function renderDrop(d){
     </div>
     <div class="toolbar">
       <button class="primary" onclick="act('/api/drops/${d.id}/reveal','เปิดขาย ${esc(d.displayName)} เดี๋ยวนี้เลย?')">🚀 เปิดขายตอนนี้</button>
+      <button onclick="openSchedule()">⏰ ตั้งเวลา</button>
       <button class="ghost-danger" onclick="act('/api/drops/${d.id}/cancel','ยกเลิก ${esc(d.displayName)}?')">ยกเลิกดรอป</button>
       <button class="ghost-danger" onclick="act('/api/drops/${d.id}/cleanup','ลบห้องชำระเงินทั้งหมด? (ข้อมูลออเดอร์ยังอยู่)')">ลบห้องทั้งหมด</button>
       <button onclick="reloadAll()">↻ รีเฟรช</button>
@@ -556,6 +558,30 @@ async function viewQueue(id){
     ).join('') : '<div class="q-empty">ยังไม่มีคนในคิว</div>';
     openPreview(`คิว — ${esc((it&&(it.title||('ลาย '+it.slot)))||'')} (${queue.length} คน)`, `<div class="q-list">${rows}</div>`);
   }catch(e){ showErr(e.message); }
+}
+
+const SCHED_ERR={ bad_time:'รูปแบบเวลาไม่ถูกต้อง', time_in_past:'ต้องเป็นเวลาในอนาคต',
+  bad_lead:'นาทีสปอยต้องอยู่ระหว่าง 0–10080', no_announce_channel:'ยังไม่ได้ตั้งห้องประกาศ — ใส่ที่ช่อง "ห้องประกาศดรอปนี้" ด้านบน หรือ ⚙️ ตั้งค่าระบบ',
+  no_payment:'ยังไม่ได้ตั้งวิธีรับเงิน — ไปที่ ⚙️ ตั้งค่าระบบ อัปรูป QR ก่อน',
+  incomplete_items:'ข้อมูลลายยังไม่ครบ — ต้องมีชื่อ + ราคา + รูป ครบทุกลาย' };
+
+function openSchedule(){
+  const d=currentDrop; if(!d) return;
+  openModal('⏰ ตั้งเวลาเปิดขาย',
+    `<label class="fld">วันเวลาเปิดขาย (เวลาไทย)<input id="sc-when" type="datetime-local" value="${esc((d.publishAtInput||'').replace(' ','T'))}"></label>
+     <label class="fld">สปอยก่อนกี่นาที (0 = ไม่สปอย)<input id="sc-lead" type="number" min="0" max="10080" value="${d.teaserLeadMinutes||0}"></label>
+     <div class="hint">พอกดบันทึก ดรอปจะเป็นสถานะ <b>scheduled</b> และบอทจะจับเวลาให้<br>
+     ⚠️ <b>บอทต้องรันอยู่ตอนถึงเวลา</b> (เปิด Mac + start-tailscale ค้างไว้) — ถ้าปิดไว้ timer จะไม่ยิง แล้วจะไปเปิดขายทันทีตอนเปิดบอทครั้งถัดไป</div>`,
+    saveSchedule);
+}
+async function saveSchedule(){
+  const d=currentDrop; if(!d) return;
+  const when=val('sc-when'), lead=val('sc-lead');
+  if(!when){ showErr('เลือกวันเวลาก่อน'); return; }
+  try{
+    await api('/api/drops/'+d.id+'/schedule','POST',{ publishAt:when, teaserLeadMinutes: lead===''?0:Number(lead) });
+    closeModal(); document.getElementById('err').textContent=''; await reloadAll();
+  }catch(e){ showErr(SCHED_ERR[e.message]||e.message); }
 }
 
 function openCreateDrop(){
