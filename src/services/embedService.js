@@ -41,8 +41,8 @@ function imageAttachment(item, baseName = 'cheki') {
 }
 
 // Buttons for a live sale message. All disabled once sold.
-function buildButtons(item) {
-  const sold = item.status === 'sold';
+function buildButtons(item, locked = false) {
+  const sold = item.status === 'sold' || locked;
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(ids.itemReserve(item.id))
@@ -80,7 +80,9 @@ function buildSalePayload(item, queueCount, opts = {}) {
       { name: 'สถานะ', value: `${meta.emoji} ${meta.label}`, inline: true },
       { name: 'คิว', value: `${queueCount} คน`, inline: true },
     );
-  if (item.description) embed.setDescription(item.description);
+  const lockNote = opts.locked && opts.publishAt ? `🔒 เปิดจอง ${discordTime(opts.publishAt, 'R')}` : null;
+  const desc = [lockNote, item.description].filter(Boolean).join('\n\n');
+  if (desc) embed.setDescription(desc);
 
   const files = [];
   const att = imageAttachment(item, opts.attachmentBase || 'cheki');
@@ -89,7 +91,9 @@ function buildSalePayload(item, queueCount, opts = {}) {
     files.push(att.attachment);
   }
 
-  if (item.status === 'sold') {
+  if (opts.locked) {
+    embed.setFooter({ text: 'ยังไม่เปิดจอง — ปุ่มจะกดได้เมื่อถึงเวลาเปิดขาย' });
+  } else if (item.status === 'sold') {
     embed.setFooter({ text: 'ปิดการขายแล้ว ขอบคุณค่ะ 💖' });
   } else if (item.status === 'reserved') {
     embed.setFooter({ text: 'มีผู้ซื้อกำลังชำระเงิน — กดจองเพื่อต่อคิวสำรองได้' });
@@ -101,7 +105,7 @@ function buildSalePayload(item, queueCount, opts = {}) {
     embeds: [embed],
     files,
     attachments: [], // drop any previously-attached files on edit
-    components: item.status === 'sold' ? [] : [buildButtons(item)],
+    components: item.status === 'sold' ? [] : [buildButtons(item, !!opts.locked)],
   };
 }
 

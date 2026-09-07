@@ -79,7 +79,14 @@ async function postTeasers(dropId) {
   const items = repo.getItemsByDrop(dropId);
   for (const item of items) {
     try {
-      const msg = await channel.send(embedService.buildTeaserPayload(item, drop.publish_at));
+      const payload = embedService.buildTeaserPayload(item, drop.publish_at);
+      // Reuse the existing message (e.g. a pre-posted locked card) so we never
+      // double-post into the announce channel.
+      let msg = item.teaser_message_id
+        ? await channel.messages.fetch(item.teaser_message_id).catch(() => null)
+        : null;
+      if (msg) await msg.edit(payload);
+      else msg = await channel.send(payload);
       repo.setItemTeaserMessage(item.id, msg.id);
     } catch (err) {
       logger.error(`teaser for item ${item.id} failed: ${err.message}`);
@@ -88,6 +95,40 @@ async function postTeasers(dropId) {
   }
   repo.setDropState(dropId, 'teasing');
   logger.info(`Drop ${dropId} teasers posted`);
+}
+
+// Post the real sale cards ahead of time with every button DISABLED, so buyers
+// can see the designs/prices but can't reserve yet. The message ids are stored
+// as teaser messages, so revealDrop later EDITS these same posts into the live,
+// clickable cards instead of posting again.
+async function postPreviewCards(dropId) {
+  const drop = repo.getDrop(dropId);
+  if (!drop) throw new Error('no_drop');
+  const channelId = repo.announceChannelFor(drop);
+  if (!channelId) throw new Error('no_announce_channel');
+  const channel = await ctx.getClient().channels.fetch(channelId);
+  const items = repo.getItemsByDrop(dropId);
+  let posted = 0;
+  for (const item of items) {
+    try {
+      const payload = embedService.buildSalePayload(item, repo.countQueue(item.id), {
+        locked: true,
+        publishAt: drop.publish_at,
+      });
+      let message = item.teaser_message_id
+        ? await channel.messages.fetch(item.teaser_message_id).catch(() => null)
+        : null;
+      if (message) await message.edit(payload);
+      else message = await channel.send(payload);
+      repo.setItemTeaserMessage(item.id, message.id);
+      posted += 1;
+    } catch (err) {
+      logger.error(`preview card for item ${item.id} failed: ${err.message}`);
+    }
+    await sleep(250);
+  }
+  logger.info(`Drop ${dropId} preview cards posted (${posted})`);
+  return { posted, total: items.length };
 }
 
 async function revealDrop(dropId) {
@@ -153,6 +194,7 @@ async function rehydrate() {
 module.exports = {
   armTimers,
   postTeasers,
+  postPreviewCards,
   revealDrop,
   cancelDrop,
   rehydrate,

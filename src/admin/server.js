@@ -238,6 +238,19 @@ function buildApp(express) {
     res.json({ drop: dropView(drop), orders: repo.getOrdersByDrop(drop.id) });
   }));
 
+  // Post the sale cards early with buttons DISABLED (buyers can look, not book).
+  // revealDrop later edits these same messages into the live, clickable cards.
+  app.post('/api/drops/:id/preview-post', requireReady, wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const drop = repo.getDrop(id);
+    if (!drop) return res.status(404).json({ error: 'no_drop' });
+    if (!repo.announceChannelFor(drop)) return res.status(400).json({ error: 'no_announce_channel' });
+    if (!repo.isDropComplete(id)) return res.status(400).json({ error: 'incomplete_items' });
+    const result = await dropService.postPreviewCards(id);
+    logger.info(`admin(${req.adminEmail}) posted preview cards for drop ${id}`);
+    res.json({ ok: true, result, drop: dropView(repo.getDrop(id)) });
+  }));
+
   // Schedule the drop: store publish/teaser times, mark it scheduled and arm the
   // timers — same flow as the Discord panel's "ตั้งเวลา" + "ยืนยันตารางขาย".
   app.post('/api/drops/:id/schedule', wrap((req, res) => {
