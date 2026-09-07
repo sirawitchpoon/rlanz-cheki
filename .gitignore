@@ -9,3 +9,6 @@ data/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# local agent/editor tooling
+.claude/

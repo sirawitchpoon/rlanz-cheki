@@ -32,7 +32,7 @@ const ticketService = require('../services/ticketService');
 const queueService = require('../services/queueService');
 const embedService = require('../services/embedService');
 const supabaseSync = require('../services/supabaseSync');
-const { formatBangkok } = require('../lib/time');
+const { formatBangkok, toBangkokInput, parseBangkok, nowSeconds } = require('../lib/time');
 const { publicList: carrierList } = require('../lib/carriers');
 
 const STATUS_LABEL = {
@@ -125,6 +125,8 @@ function dropView(drop) {
     publishAt: drop.publish_at,
     publishAtText: drop.publish_at ? formatBangkok(drop.publish_at) : null,
     teaserAt: drop.teaser_at,
+    publishAtInput: drop.publish_at ? toBangkokInput(drop.publish_at) : '',
+    teaserLeadMinutes: drop.publish_at && drop.teaser_at ? Math.round((drop.publish_at - drop.teaser_at) / 60) : 0,
     announceChannelId: drop.announce_channel_id || null,
     announceChannelName: channelName(drop.announce_channel_id),
     items: repo.getItemsByDrop(drop.id).map(itemView),
@@ -234,6 +236,34 @@ function buildApp(express) {
     const drop = repo.getDrop(Number(req.params.id));
     if (!drop) return res.status(404).json({ error: 'no_drop' });
     res.json({ drop: dropView(drop), orders: repo.getOrdersByDrop(drop.id) });
+  }));
+
+  // Schedule the drop: store publish/teaser times, mark it scheduled and arm the
+  // timers — same flow as the Discord panel's "ตั้งเวลา" + "ยืนยันตารางขาย".
+  app.post('/api/drops/:id/schedule', wrap((req, res) => {
+    const id = Number(req.params.id);
+    const drop = repo.getDrop(id);
+    if (!drop) return res.status(404).json({ error: 'no_drop' });
+
+    const publishAt = parseBangkok(String((req.body && req.body.publishAt) || '').trim());
+    if (publishAt == null) return res.status(400).json({ error: 'bad_time' });
+    if (publishAt <= nowSeconds()) return res.status(400).json({ error: 'time_in_past' });
+
+    const raw = req.body && req.body.teaserLeadMinutes;
+    const lead = raw === '' || raw == null ? 0 : Number(raw);
+    if (!Number.isInteger(lead) || lead < 0 || lead > 10080) return res.status(400).json({ error: 'bad_lead' });
+
+    // Readiness checks, mirroring the Discord publish button.
+    if (!repo.announceChannelFor(drop)) return res.status(400).json({ error: 'no_announce_channel' });
+    const cfg = repo.getConfig();
+    if (!cfg || (!cfg.promptpay_id && !cfg.qr_image_path)) return res.status(400).json({ error: 'no_payment' });
+    if (!repo.isDropComplete(id)) return res.status(400).json({ error: 'incomplete_items' });
+
+    repo.setDropTimes(id, publishAt, lead > 0 ? publishAt - lead * 60 : null);
+    repo.setDropState(id, 'scheduled');
+    dropService.armTimers(id);
+    logger.info(`admin(${req.adminEmail}) scheduled drop ${id} at ${publishAt} (lead ${lead}m)`);
+    res.json({ ok: true, drop: dropView(repo.getDrop(id)) });
   }));
 
   // Rename a drop and/or set the text channel it posts to (both pure DB, no
