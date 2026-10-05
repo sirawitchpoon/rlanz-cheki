@@ -1,5 +1,9 @@
 # Web Dashboard + Cloudflare (auth "เฉพาะฉัน")
 
+> **ที่ใช้จริงตอนนี้:** รันบน Mac ผ่าน `./scripts/start-tailscale.sh` (Tailscale Funnel, URL ถาวรฟรี) → ดู [TAILSCALE.md](./TAILSCALE.md)
+> หน้านี้คือทางเลือก Cloudflare (Quick Tunnel / Named Tunnel + Access) และรายการ API ด้านล่าง
+
+
 Dashboard หลังบ้านสำหรับดูสถานะ + สั่งเปิด/ปิด/ข้ามคิว โดย **ไม่ต้องเปิดพอร์ตออกเน็ต** และ auth ให้เฉพาะอีเมลคุณเข้าได้
 
 ## ภาพรวมสถาปัตยกรรม
@@ -118,15 +122,43 @@ npm install && pm2 restart cheki
 
 ---
 
-## API ที่มีให้ (สำหรับต่อยอด)
+## API ที่มีให้
 
+🔌 = ต้องให้บอทต่อ Discord อยู่ (`requireReady` → ถ้ายังไม่ต่อได้ 503) · ที่เหลือแตะแค่ DB ใช้ได้เสมอ
+
+**ดรอป**
 | Method | Path | ทำอะไร |
 |---|---|---|
-| GET | `/api/status` | ดรอปปัจจุบัน + ทุกลาย + **ลายไหนอยู่ห้องไหน** (channelId) |
-| GET | `/api/drops/:id` | รายละเอียดดรอป + ออเดอร์ |
-| POST | `/api/drops/:id/reveal` | เปิดขายเดี๋ยวนี้ (เหมือน timer publish) |
-| POST | `/api/drops/:id/cancel` | ยกเลิกดรอป |
-| POST | `/api/drops/:id/cleanup` | ลบห้องชำระเงินทั้งหมด (เก็บออเดอร์ไว้) |
-| POST | `/api/items/:id/release` | ข้ามคิว #1 ของลายนั้น (advance) |
+| GET | `/api/drops` | รายชื่อดรอปทั้งหมด (sidebar) |
+| POST | `/api/drops` | สร้างดรอป `{ name, count }` (1–20 ลาย) |
+| GET | `/api/drops/:id` | ดรอป + ทุกลาย (ห้อง/ผู้ซื้อ/เลขแทร็ก) + ออเดอร์ |
+| PATCH | `/api/drops/:id` | `{ name, announceChannelId }` |
+| POST | `/api/drops/:id/schedule` | `{ publishAt, teaserLeadMinutes }` → เช็คความพร้อม (ห้องประกาศ/วิธีรับเงิน/ลายครบ) แล้วตั้ง `scheduled` + armTimers |
+| POST | `/api/drops/:id/preview-post` 🔌 | โพสต์การ์ดจริงล่วงหน้า ปุ่มล็อก (แก้ข้อความเดิมถ้าเคยโพสต์) |
+| POST | `/api/drops/:id/reveal` 🔌 | เปิดขายเดี๋ยวนี้ (เหมือน timer publish) |
+| POST | `/api/drops/:id/cancel` 🔌 | ยกเลิกดรอป |
+| POST | `/api/drops/:id/cleanup` 🔌 | ลบห้องจ่ายเงินทั้งหมดของดรอป (ออเดอร์ยังอยู่) |
+| GET | `/api/status` | ดรอปล่าสุด (legacy — UI ใช้ `/api/drops` แทน) |
 
-ทุก write action เรียกผ่าน service เดิม (`dropService`/`ticketService`/`queueService`) จึงยัง **ปลอดภัยเรื่อง concurrency** (mutex + transaction) เหมือนกดปุ่มใน Discord
+**ลาย / ออเดอร์**
+| Method | Path | ทำอะไร |
+|---|---|---|
+| PATCH | `/api/items/:id` | `{ title, description, priceBaht }` |
+| POST | `/api/items/:id/image` | อัป/เปลี่ยนรูป `{ filename, dataBase64 }` |
+| GET | `/api/items/:id/image` | เสิร์ฟรูป (ใช้ใน preview) |
+| GET | `/api/items/:id/queue` | คิวเรียงลำดับ + Discord username |
+| POST | `/api/items/:id/release` 🔌 | ข้ามคิว #1 (advance) |
+| PATCH | `/api/items/:id/order` | `{ recipient }` เก็บชื่อผู้รับ (ไม่ ping ใคร) |
+| POST | `/api/items/:id/track` 🔌 | `{ trackingNo, carrier, recipient }` → ส่ง embed เลขแทร็กเข้าห้องผู้ซื้อ |
+
+**ตั้งค่า / อื่นๆ**
+| Method | Path | ทำอะไร |
+|---|---|---|
+| GET | `/api/config` | ค่าตั้งค่า + ชื่อห้อง/role ที่ resolve แล้ว |
+| PATCH | `/api/config` | `{ promptpayId, announceChannelId, ticketCategoryId, adminRoleId }` |
+| POST | `/api/config/qr` | อัปรูป QR พร้อมเพย์ |
+| GET | `/api/config/qr-image` | เสิร์ฟรูป QR |
+| GET | `/api/carriers` | รายการขนส่ง (ไปรษณีย์ไทย / Flash) |
+| GET | `/api/health` | เช็คว่า auth ผ่าน |
+
+ทุก write action เรียกผ่าน service เดิม (`dropService`/`ticketService`/`queueService`) จึงยัง **ปลอดภัยเรื่อง concurrency** (mutex + transaction) เหมือนกดปุ่มใน Discord — เพิ่ม route ใหม่ให้อัปเดตตารางนี้ด้วย
